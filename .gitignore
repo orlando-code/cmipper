@@ -1,0 +1,27 @@
+# macOS files
+.DS_Store
+
+# large data files
+*.nc
+*.tif
+*.jpg
+
+# supplementary information
+*.pdf
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# VisualStudioCode
+.vscode/**/*
+
+### VisualStudioCode Patch ###
+# Ignore all local history of files
+**/.history
+
+# ignore data folder: too large for repository
+/data
+
+# ignore logging: specific to user
+/logs
