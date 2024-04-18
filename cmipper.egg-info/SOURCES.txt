@@ -1,0 +1,8 @@
+setup.py
+cmipper/cds_downloads.py
+cmipper/download_cmip6_data_parallel.py
+cmipper/functions_creche.py
+cmipper.egg-info/PKG-INFO
+cmipper.egg-info/SOURCES.txt
+cmipper.egg-info/dependency_links.txt
+cmipper.egg-info/top_level.txt
