@@ -1,29 +1,25 @@
-import importlib
-import inspect
 from pathlib import Path
-import os
 
 
 def get_cmipper_module_dir():
-    cmipper_module = importlib.import_module("cmipper")
-    cmipper_dir = Path(inspect.getabsfile(cmipper_module)).parent
-    return (cmipper_dir / "..").resolve()
+    return Path(__file__).resolve().parent
 
 
-"""
-Defines globals used throughout the codebase.
-"""
+def get_repo_dir():
+    return get_cmipper_module_dir().parent
 
-###############################################################################
-# Folder structure naming system
-###############################################################################
 
-data_folder = "data"
+# Define global filepaths used throughout
+################################################################################
 
-cmip6_data_folder = os.path.join(data_folder, "env_vars", "cmip6")
-static_cmip6_data_folder = os.path.join(
-    cmip6_data_folder, "EC-Earth3P-HR/r1i1p2f1_latlon"
-)
+repo_dir = get_repo_dir()
+data_dir = repo_dir / "data"
+logging_dir = repo_dir / "logs"
+model_info = repo_dir / "model_info.yaml"
+download_config = repo_dir / "download_config.yaml"
 
+cmip6_data_dir = data_dir / "env_vars" / "cmip6"
+
+# TODO: automate creation of example figures and videos from downloads. But who has the time?
 # figure_folder = "figures"
 # video_folder = "videos"

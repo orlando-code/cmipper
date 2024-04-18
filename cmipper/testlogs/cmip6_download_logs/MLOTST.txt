@@ -1,4 +1,0 @@
-Traceback (most recent call last):
-  File "/Users/rt582/Library/CloudStorage/OneDrive-UniversityofCambridge/cambridge/phd/cmipper/cmipper/download_cmip6_data_parallel.py", line 6, in <module>
-    import xarray as xa
-ModuleNotFoundError: No module named 'xarray'

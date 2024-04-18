@@ -1,0 +1,35 @@
+variable_ids:
+  - hfds
+  # - rsdo
+  # - umo
+  # - vmo
+  # - mlotst
+  # - so
+  # - thetao
+  # - uo
+  # - vo
+  # - wfo
+  - tos
+member_ids:
+  - r1i1p2f1
+  - r3i1p2f1
+experiment_ids:
+  hist-1950:
+    - 1950
+    - 1952
+  highres-future:
+    - 2030
+    - 2032
+lats:
+  - -15
+  - -10
+lons:
+  - 135
+  - 140
+levs:
+  - 0
+  - 2
+processing:
+  do_regrid: true
+  do_delete_og: false
+  do_crop: true
