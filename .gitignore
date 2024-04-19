@@ -21,7 +21,7 @@ __pycache__/
 **/.history
 
 # package help
-cmipper.egg-info
+*.egg-info/
 
 # ignore data folder: too large for repository
 /data
