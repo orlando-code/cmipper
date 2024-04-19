@@ -22,6 +22,11 @@ __pycache__/
 
 # package help
 *.egg-info/
+*.egg
+eggs/
+.eggs/
+cmipper.egg-info/
+
 
 # ignore data folder: too large for repository
 /data
