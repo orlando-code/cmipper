@@ -5,8 +5,6 @@ import time
 import warnings
 import xarray as xa
 
-import argparse
-import requests
 from pathlib import Path
 import re
 
@@ -69,6 +67,7 @@ def download_cmip_variable_data(
     INT_LATS = [int(lat) for lat in LATS]
     INT_LONS = [int(lon) for lon in LONS]
     LEVS = sorted([abs(val) for val in download_config_dict["levs"]])
+    RESOLUTION = source_id_dict["resolution"]
     # processing values
     do_regrid = download_config_dict["processing"]["do_regrid"]
     do_delete_og = download_config_dict["processing"]["do_delete_og"]
@@ -128,11 +127,11 @@ def download_cmip_variable_data(
         results = list(set(results))  # remove any duplicate values
 
         YEAR_RANGE = sorted(download_config_dict["experiment_ids"][experiment_id])
-        print("here")
         # skip any unrequired dates
         relevant_results = file_ops.find_files_for_time(results, year_range=YEAR_RANGE)
         print(
-            f"found {len(results)} files on {data_node} node of which {len(relevant_results)} fall(s) within required date range.".format(
+            f"""found {len(results)} files on {data_node} node of which {len(relevant_results)}
+            fall(s) within required date range.""".format(
                 end="", flush=True
             )
         )
@@ -188,11 +187,10 @@ def download_cmip_variable_data(
                             result, decode_times=True, chunks={"time": "499MB"}
                         )[variable_id]
                     else:  # if seafloor or specified pressure, open with limited levels, chunked spatially
-                        # print("\n\n\n\nmin(LEVS):", type((LEVS)), type(min(LEVS))) TODO
                         ds = xa.open_dataset(
                             result,
                             decode_times=True,  # not all times easily decoded
-                            chunks={"i": 200, "j": 200},
+                            chunks={"i": "499MB"},
                         ).isel(lev=slice(min(LEVS), max(LEVS)))
                         if plevel == -1:  # if seafloor
                             if (
@@ -467,7 +465,7 @@ def merge_cmip_data_by_variables(source_id, experiment_id, member_id):
     download_dir = (
         config.cmip6_data_dir / source_id / member_id / "newtest"
     )  # TODO: remove testing folder
-    source_id_dict = utils.read_yaml(config.model_info)[source_id]
+    # source_id_dict = utils.read_yaml(config.model_info)[source_id]
     download_config_dict = utils.read_yaml(config.download_config)
 
     DO_CROP = download_config_dict["processing"]["do_crop"]

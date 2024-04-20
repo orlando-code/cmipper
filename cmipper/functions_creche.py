@@ -9,7 +9,8 @@ import numpy as np
 # download
 from concurrent.futures import ThreadPoolExecutor
 import subprocess
-from cdo import Cdo
+
+# from cdo import Cdo
 
 # custom
 from cmipper import config, utils

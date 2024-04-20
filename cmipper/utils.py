@@ -287,16 +287,16 @@ def reset_stdout_stderr():
 
 
 def execute_functions_in_threadpool(func, args):
-    with concurrent.futures.ThreadPoolExecutor() as executor:
+    # hardcoding mac_workers so as to not cause issues on sherwood
+    with concurrent.futures.ThreadPoolExecutor(max_workers=32) as executor:
         futures = [executor.submit(func, *arg) for arg in args]
-        concurrent.futures.wait(futures)
         return futures
 
 
 def handle_errors(futures):
     for future in futures:
         try:
-            result = future.result()
+            future.result()
         except Exception as e:
             print(f"An error occurred: {e}")
 

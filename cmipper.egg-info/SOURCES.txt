@@ -1,8 +1,11 @@
+README.md
 setup.py
-cmipper/cds_downloads.py
 cmipper/config.py
-cmipper/download_cmip6_data_parallel.py
+cmipper/downloading.py
+cmipper/file_ops.py
 cmipper/functions_creche.py
+cmipper/main.py
+cmipper/parallelised_download_and_process.py
 cmipper/utils.py
 cmipper.egg-info/PKG-INFO
 cmipper.egg-info/SOURCES.txt
