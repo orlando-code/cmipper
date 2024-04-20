@@ -55,39 +55,6 @@ def extract_lat_lon_ranges_from_fp(file_path):
         return [-9999, -9999], [-9999, -9999]
 
 
-def limit_model_info_dict(model, download):
-    """
-    Limit the model info dict to only the data that is specified for the download.
-    """
-    return {
-        source_id: {
-            "resolution": source_data["resolution"],
-            "experiment_ids": [
-                exp_id
-                for exp_id in source_data["experiment_ids"]
-                if exp_id in download["experiment_ids"]
-            ],
-            "member_ids": [
-                member_id
-                for member_id in source_data["member_ids"]
-                if member_id in download["member_ids"]
-            ],
-            "data_nodes": source_data["data_nodes"],
-            "frequency": source_data["frequency"],
-            "variable_dict": {
-                var_id: var_data
-                for var_id, var_data in source_data["variable_dict"].items()
-                if var_id in download["variable_ids"]
-            },
-        }
-        for source_id, source_data in model.items()
-        if any(
-            var_id in download["variable_ids"]
-            for var_id in source_data["variable_dict"]
-        )
-    }
-
-
 # NEEDS WORK
 ################################################################################
 

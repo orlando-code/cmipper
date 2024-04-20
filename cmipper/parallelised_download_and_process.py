@@ -4,6 +4,7 @@ import numpy as np
 import time
 import warnings
 import xarray as xa
+import argparse
 
 from pathlib import Path
 import re
@@ -539,3 +540,33 @@ def process_cmip6_data(source_id, experiment_id, member_id, variable_id):
 
     dur = time.time() - tic
     print(f"\n\nTOTAL DURATION: {np.floor(dur / 60):.0f}m:{dur % 60:.0f}s\n")
+
+
+def main():
+
+    # COMMAND LINE INPUT FROM BASH SCRIPT
+    ################################################################################
+    parser = argparse.ArgumentParser()
+
+    # model info
+    source_id = parser.add_argument("--source_id", default="EC-Earth3P-HR", type=str)
+    member_id = parser.add_argument("--member_id", default="r1i1p2f1", type=str)
+    variable_id = parser.add_argument("--variable_id", default="tos", type=str)
+
+    commandline_args = parser.parse_args()
+
+    source_id = commandline_args.source_id
+    member_id = commandline_args.member_id
+    variable_id = commandline_args.variable_id
+
+    # source_id = "EC-Earth3P-HR"
+    # member_id = "r1i1p2f1"
+    # variable_id = "tos"
+
+    # DOWNLOAD DATA
+    ################################################################################
+    download_cmip_variable_data(source_id, member_id, variable_id)
+
+
+if __name__ == "__main__":
+    main()
