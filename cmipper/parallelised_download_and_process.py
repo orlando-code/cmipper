@@ -343,9 +343,9 @@ def download_cmip_variable_data(
         )
 
         print(
-            f"\n{len(failed_regrids)} regrids failed.\n"
+            f"\n{len(failed_regrids)} regrid(s) failed.\n"
             if len(failed_regrids) == 0
-            else f"\n{len(failed_regrids)} regrids failed. The following are likely corrupted: \n"
+            else f"\n{len(failed_regrids)} regrid(s) failed. The following are likely corrupted: \n"
             + "\n".join(str(item) for item in failed_regrids)
             + "\n"
         )
