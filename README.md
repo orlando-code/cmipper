@@ -37,3 +37,6 @@ conda env create --file environment.yml
 ```
 conda create --name <new_environment_name> --file requirements.txt
 ```
+
+## Downloading your data
+If a download process is interrupted, e.g. you want to change your download parameters, it's good to shut down the previous instance. This can be achieved through the following command in whatever terminal you're using: `pkill -9 -f <path_to_download_script.py>` (that'll be `pkill -9 -f cmipper cmipper/parallelised_download_and_process.py` if you haven't messed with the file structure).
