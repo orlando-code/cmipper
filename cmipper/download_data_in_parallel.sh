@@ -1,26 +1,19 @@
  #!/bin/bash
 
-mkdir -p testlogs/cmip6_download_logs/
-
-
-# HadGEM3-GC31-HH
-# python3 icenet/download_cmip6_data.py  --source_id HadGEM3-GC31-HH --member_id r1i1p1f1 > logs/cmip6_download_logs/HG_r1i1p1f1.txt 2>&1 &
-
-# BCC-CSM2-HR
-# python3 coralshift/dataloading/download_cmip6_data.py  --source_id BCC-CSM2-HR --member_id r1i1p1f1 > logs/cmip6_download_logs/BCC-CSM2-HR.txt 2>&1 &
+mkdir -p logs/cmip6_download_logs/
 
 # EC-Earth3P-HR
-python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id mlotst --member_id r1i1p2f1 > testlogs/cmip6_download_logs/mlotst_download.log 2>&1 &
-python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id tos --member_id r1i1p2f1 > testlogs/cmip6_download_logs/tos_download.log 2>&1 &
-python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id rsdo --member_id r1i1p2f1 > testlogs/cmip6_download_logs/rsdo_download.log 2>&1 &
-python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id so --member_id r1i1p2f1 > testlogs/cmip6_download_logs/so_download.log 2>&1 &
-python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id thetao --member_id r1i1p2f1 > testlogs/cmip6_download_logs/thetao_download.log 2>&1 &
-python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id hfds --member_id r1i1p2f1 > testlogs/cmip6_download_logs/hfds_download.log 2>&1 &
-python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id umo --member_id r1i1p2f1 > testlogs/cmip6_download_logs/umo_download.log 2>&1 &
-python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id uo --member_id r1i1p2f1 > testlogs/cmip6_download_logs/uo_download.log 2>&1 &
-python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id vmo --member_id r1i1p2f1 > testlogs/cmip6_download_logs/vmo_download.log 2>&1 &
-python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id vo --member_id r1i1p2f1 > testlogs/cmip6_download_logs/vo_download.log 2>&1 &
-python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id wfo --member_id r1i1p2f1 > testlogs/cmip6_download_logs/wfo_download.log 2>&1 &
+# python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id mlotst --member_id r1i1p2f1 > logs/cmip6_download_logs/mlotst_download.log 2>&1 &
+python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id tos --member_id r1i1p2f1 > logs/cmip6_download_logs/tos_download.log 2>&1 &
+# python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id rsdo --member_id r1i1p2f1 > logs/cmip6_download_logs/rsdo_download.log 2>&1 &
+# python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id so --member_id r1i1p2f1 > logs/cmip6_download_logs/so_download.log 2>&1 &
+# python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id thetao --member_id r1i1p2f1 > logs/cmip6_download_logs/thetao_download.log 2>&1 &
+# python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id hfds --member_id r1i1p2f1 > logs/cmip6_download_logs/hfds_download.log 2>&1 &
+# python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id umo --member_id r1i1p2f1 > logs/cmip6_download_logs/umo_download.log 2>&1 &
+# python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id uo --member_id r1i1p2f1 > logs/cmip6_download_logs/uo_download.log 2>&1 &
+# python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id vmo --member_id r1i1p2f1 > logs/cmip6_download_logs/vmo_download.log 2>&1 &
+# python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id vo --member_id r1i1p2f1 > logs/cmip6_download_logs/vo_download.log 2>&1 &
+# python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id wfo --member_id r1i1p2f1 > logs/cmip6_download_logs/wfo_download.log 2>&1 &
 
 
 # POTENTIAL AUTOMATION

@@ -13,7 +13,7 @@ EC-Earth3P-HR:
   # List of data nodes
   data_nodes:
     - esgf-data1.llnl.gov
-    - esgf.ceda.ac.uk
+    # - esgf.ceda.ac.uk # more errors (curl)
     # - esgf3.dkrz.de # calling url throws errors
     # - cmip.bcc.cma.cn  # listed in metadata from https://esgf-node.llnl.gov/search/cmip6/
   # Frequency of data (monthly)

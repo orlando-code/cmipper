@@ -5,6 +5,7 @@ import time
 import warnings
 import xarray as xa
 import argparse
+from tqdm.auto import tqdm
 
 from pathlib import Path
 import re
@@ -79,7 +80,7 @@ def download_cmip_variable_data(
 
     # file setting
     download_dir = (
-        config.cmip6_data_dir / source_id / member_id / "newtest"
+        config.cmip6_data_dir / source_id / member_id
     )  # TODO: remove testing folder
     if not download_dir.exists():
         download_dir.mkdir(parents=True, exist_ok=True)
@@ -287,7 +288,16 @@ def download_cmip_variable_data(
                         print(fpaths_og[i])
                         os.remove(fpaths_og[i])
 
-                    ds = xa.open_dataset(fpaths_regridded[i])
+                    try:
+                        ds = xa.open_dataset(fpaths_regridded[i])
+                    except Exception as e:
+                        print(
+                            f"\nregridded file {fpaths_regridded[i]} appears corrupted, skipping...",
+                            flush=True,
+                        )
+                        print("Error: \n", e, flush=True)
+                        failed_regrids.append(fpaths_regridded[i])
+                        continue
 
                 if do_crop:
                     cropped_dir_name = f"cropped_{utils.lat_lon_string_from_tuples(INT_LATS, INT_LONS).upper()}"
@@ -345,8 +355,8 @@ def download_cmip_variable_data(
         print(
             f"\n{len(failed_regrids)} regrid(s) failed.\n"
             if len(failed_regrids) == 0
-            else f"\n{len(failed_regrids)} regrid(s) failed. The following are likely corrupted: \n"
-            + "\n".join(str(item) for item in failed_regrids)
+            else f"\n{len(failed_regrids)} regrid(s) failed. The following are/is likely corrupted: \n"
+            + "\n".join(str(item) for item in list(set(failed_regrids)))
             + "\n"
         )
 
@@ -355,9 +365,9 @@ def download_cmip_variable_data(
 ################################################################################
 
 
-def concat_cmip_files_by_time(source_id, experiment_id, member_id, variable_id):
+def concat_cmip_files_by_time(source_id, year_range, member_id):
     download_dir = (
-        config.cmip6_data_dir / source_id / member_id / "newtest"
+        config.cmip6_data_dir / source_id / member_id
     )  # TODO: remove testing folder
     source_id_dict = utils.read_yaml(config.model_info)[source_id]
     download_config_dict = utils.read_yaml(config.download_config)
@@ -368,12 +378,13 @@ def concat_cmip_files_by_time(source_id, experiment_id, member_id, variable_id):
     INT_LATS = [int(lat) for lat in LATS]
     INT_LONS = [int(lon) for lon in LONS]
     LEVS = sorted([abs(val) for val in download_config_dict["levs"]])
-    YEAR_RANGE = download_config_dict["experiment_ids"][experiment_id]
+    YEAR_RANGE = sorted(year_range)  # TODO: include months option
+    # YEAR_RANGE = download_config_dict["experiment_ids"][experiment_id]
 
     # CONCATENATE BY TIME
     tic = time.time()
 
-    conc_var_dir = download_dir / "concatted_vars"
+    conc_var_dir = download_dir / "regridded" / "concatted_vars"
     if DO_CROP:
         conc_var_dir = Path(
             str(conc_var_dir)
@@ -382,92 +393,109 @@ def concat_cmip_files_by_time(source_id, experiment_id, member_id, variable_id):
     if not conc_var_dir.exists():
         conc_var_dir.mkdir(parents=True, exist_ok=True)
 
+    num_concatted = 0
     # fetch variable_id to fetch all files to be concatted
-    # for variable_id in list(source_id_dict["variable_dict"].keys()):
-    if DO_CROP:
-        variable_dir = (
-            download_dir
-            / "regridded"
-            / f"cropped_{utils.lat_lon_string_from_tuples(INT_LATS, INT_LONS).upper()}"
-            / variable_id
-        )
-    else:
-        # directory with individual files for single variable
-        variable_dir = download_dir / "regridded" / variable_id
-
-    # if not variable_dir.exists():
-    #     print(f"{variable_dir} does not exist, skipping", flush=True)
-    #     continue
-
-    fps = list(variable_dir.glob("*.nc"))
-
-    if YEAR_RANGE:
-        oldest_date = str(min(YEAR_RANGE)) + "00"
-        newest_date = str(max(YEAR_RANGE) - 1) + "12"
-    else:
-        oldest_file = min(
-            fps, key=lambda filename: int(re.findall(r"\d{4}", str(filename))[0])
-        )
-        newest_file = max(
-            fps, key=lambda filename: int(re.findall(r"\d{4}", str(filename))[0])
-        )
-        oldest_date = str(oldest_file.name).split("_")[-1].split("-")[0]
-        newest_date = str(newest_file.name).split("_")[-1].split("-")[1].split(".")[0]
-
-    fname = utils.FileName(
-        variable_id=variable_id,
-        grid_type="latlon",
-        fname_type="time_concatted",
-        lats=LATS,
-        lons=LONS,
-        levs=LEVS,
-        plevels=source_id_dict["variable_dict"][variable_id]["plevels"],
-        date_range=[oldest_date, newest_date],
-    ).construct_fname()
-    concatted_fp = conc_var_dir / fname
-
-    if concatted_fp.exists():
-        print(f"\nconcatenated file already exists at {str(concatted_fp)}", flush=True)
-    else:
-        # fetch all the filepaths of the files containing dates between oldest_date and newest_date
-        nc_fps = [
-            fp
-            for fp in fps
-            if oldest_date <= str(fp.name).split("_")[-1].split("-")[0]
-            and newest_date >= str(fp.name).split("_")[-1].split("-")[1].split(".")[0]
-        ]
-
-        if len(nc_fps) == 0:
-            print(
-                f"skipping {variable_id} since no files found between {oldest_date} and {newest_date}..."
+    for variable_id in list(source_id_dict["variable_dict"].keys()):
+        if DO_CROP:
+            variable_dir = (
+                download_dir
+                / "regridded"
+                / f"cropped_{utils.lat_lon_string_from_tuples(INT_LATS, INT_LONS).upper()}"
+                / variable_id
             )
-            # continue
         else:
+            # directory with individual files for single variable
+            variable_dir = download_dir / "regridded" / variable_id
 
-            print(f"concatenating {variable_id} files by time... ", flush=True)
+        # if not variable_dir.exists():
+        #     print(f"{variable_dir} does not exist, skipping", flush=True)
+        #     continue
 
-            concatted = xa.open_mfdataset(nc_fps)
-
-            # decode time
-            concatted = concatted.convert_calendar(
-                "gregorian", dim="time"
-            )  # may not be universal for all models
-            print(
-                f"saving concatenated file to {concatted_fp}... ",
-                flush=True,
+        fps = list(variable_dir.glob("*.nc"))
+        # cast year integers to strings encompassing their months
+        if YEAR_RANGE:
+            oldest_date = str(min(YEAR_RANGE)) + "00"
+            newest_date = str(max(YEAR_RANGE) - 1) + "12"
+        else:
+            oldest_file = min(
+                fps, key=lambda filename: int(re.findall(r"\d{4}", str(filename))[0])
             )
-            concatted.to_netcdf(concatted_fp)
+            newest_file = max(
+                fps, key=lambda filename: int(re.findall(r"\d{4}", str(filename))[0])
+            )
+            oldest_date = str(oldest_file.name).split("_")[-1].split("-")[0]
+            newest_date = (
+                str(newest_file.name).split("_")[-1].split("-")[1].split(".")[0]
+            )
+        # construct name of time-concattenated file
+        fname = utils.FileName(
+            variable_id=variable_id,
+            grid_type="latlon",
+            fname_type="time_concatted",
+            lats=LATS,
+            lons=LONS,
+            levs=LEVS,
+            plevels=source_id_dict["variable_dict"][variable_id]["plevels"],
+            date_range=[oldest_date, newest_date],
+        ).construct_fname()
+        concatted_fp = conc_var_dir / fname
 
-        time_concat_tic = time.time() - tic
-        print(
-            f"\nConcatenating files by time took {np.floor(time_concat_tic / 60):.0f}m:{time_concat_tic % 60:.0f}s.\n"
-        )
+        if concatted_fp.exists():
+            print(
+                f"\nconcatenated file already exists at {str(concatted_fp)}", flush=True
+            )
+        else:
+            # fetch all the filepaths of the files containing dates between oldest_date and newest_date
+            fps_within_date = [
+                fp
+                for fp in fps
+                if oldest_date <= str(fp.name).split("_")[-1].split("-")[0]
+                and newest_date
+                >= str(fp.name).split("_")[-1].split("-")[1].split(".")[0]
+            ]
+
+            if len(fps_within_date) == 0:
+                print(
+                    f"skipping {variable_id} since no files found between {oldest_date} and {newest_date}..."
+                )
+                # continue
+            else:
+                if len(fps_within_date) == (YEAR_RANGE[1] - YEAR_RANGE[0]):
+                    print(
+                        f"\nAll {len(fps_within_date)} expected files found for {variable_id} between {oldest_date} and {newest_date}... ",  # noqa
+                        flush=True,
+                    )
+                else:
+                    print(
+                        f"\n{len(fps_within_date)} files found for {variable_id} between "
+                        f"{oldest_date} and {newest_date}... Is this expected, or are there files missing?",
+                        flush=True,
+                    )
+
+                print(f"concatenating {variable_id} files by time... ", flush=True)
+
+                concatted = xa.open_mfdataset(fps_within_date)
+
+                # decode time
+                concatted = concatted.convert_calendar(
+                    "gregorian", dim="time"
+                )  # may not be universal for all models
+                print(
+                    f"saving concatenated file to {concatted_fp}... ",
+                    flush=True,
+                )
+                concatted.to_netcdf(concatted_fp)
+                num_concatted += 1
+
+    time_concat_tic = time.time() - tic
+    print(
+        f"\nConcatenating {num_concatted} sets of variable files by time took "
+        f"{np.floor(time_concat_tic / 60):.0f}m:{time_concat_tic % 60:.0f}s.\n"
+    )
 
 
-def merge_cmip_data_by_variables(source_id, experiment_id, member_id):
-    download_dir = (
-        config.cmip6_data_dir / source_id / member_id / "newtest"
-    )  # TODO: remove testing folder
+def merge_cmip_data_by_variables(source_id, year_range, member_id):
+    download_dir = config.cmip6_data_dir / source_id / member_id / "regridded"
     # source_id_dict = utils.read_yaml(config.model_info)[source_id]
     download_config_dict = utils.read_yaml(config.download_config)
 
@@ -477,15 +505,18 @@ def merge_cmip_data_by_variables(source_id, experiment_id, member_id):
     INT_LATS = [int(lat) for lat in LATS]
     INT_LONS = [int(lon) for lon in LONS]
     LEVS = sorted([abs(val) for val in download_config_dict["levs"]])
-    YEAR_RANGE = download_config_dict["experiment_ids"][experiment_id]
+    YEAR_RANGE = sorted(year_range)  # TODO: include months option
+
+    # YEAR_RANGE = download_config_dict["experiment_ids"][experiment_id]
 
     tic = time.time()
 
     # MERGE VARIABLES
     conc_var_dir = download_dir / "concatted_vars"
     if DO_CROP:
-        conc_var_dir = str(conc_var_dir) + (
-            f"_{utils.lat_lon_string_from_tuples(INT_LATS, INT_LONS).upper()}"
+        conc_var_dir = Path(
+            str(conc_var_dir)
+            + (f"_{utils.lat_lon_string_from_tuples(INT_LATS, INT_LONS).upper()}")
         )
 
     if not Path(conc_var_dir).exists():
@@ -512,14 +543,15 @@ def merge_cmip_data_by_variables(source_id, experiment_id, member_id):
         date_range=[oldest_date, newest_date],
     ).construct_fname()
 
-    merged_fp = download_dir / merged_fname
+    # merged_fp = download_dir / merged_fname
+    merged_fp = conc_var_dir / merged_fname
     if not merged_fp.exists():
         print(
             f"\nmerging variable files and saving to {merged_fp}... ",
             flush=True,
         )
         dss = [xa.open_dataset(fp) for fp in var_nc_fps]
-        merged = xa.merge(dss)
+        merged = utils.process_xa_d(xa.merge(dss))
         merged.to_netcdf(merged_fp)
 
         var_concat_tic = time.time() - tic
@@ -533,12 +565,105 @@ def merge_cmip_data_by_variables(source_id, experiment_id, member_id):
         )
 
 
-def process_cmip6_data(source_id, experiment_id, member_id, variable_id):
+def delete_corrupt_files(source_id, member_id):
+    """Some files may fail to regrid, usually due to partial download. This function attempts to remap
+    the file to some arbitrary path and deletes any files which fail.
+
+    TODO: any way to speed this up?
+    TODO: should also (or another function) attempt to open final files and check if errors are thrown
+    TODO: if a regridded file has all time values the same, delete it. Can happen through faulty download
+    """
+    download_dir = config.cmip6_data_dir / source_id / member_id
+    og_grid_dir = download_dir / "og_grid"
+    # regrid_dir = download_dir / "regridded" / "umo"
+
+    var_dirs = [entry for entry in og_grid_dir.iterdir() if entry.is_dir()]
+    # var_dirs = [og_grid_dir]
+
+    corrupt = []
+    legit = []
+    for variable_dir in tqdm(var_dirs, total=len(var_dirs)):
+        nc_fps = list(variable_dir.glob("*.nc"))
+        # check file opens
+        for nc_fp in tqdm(
+            nc_fps,
+            total=len(nc_fps),
+            desc=f"Checking for corrupt files in {variable_dir.name} directory...",
+        ):
+            if does_nc_open(nc_fp):
+                legit.append(nc_fp)
+            else:
+                corrupt.append(nc_fp)
+                print(f"file {nc_fp} does not open. Removing...")
+                os.remove(nc_fp)
+
+    # check for and remove duplicate time values
+    for nc_fp in tqdm(
+        legit,
+        desc="Checking for duplicate time values indicating download failure...",
+    ):
+        if does_nc_have_duplicate_coords(nc_fp):
+            corrupt.append(nc_fp)
+            print(f"file {nc_fp} has duplicated coordinate values. Removing...")
+            os.remove(nc_fp)
+
+    if len(corrupt) > 0:
+        print(f"\n\n{len(corrupt)} corrupt files found and removed:\n")
+        print("It is recommended to re-run the download process.")
+        # if not output_dir.exists():
+        #     output_dir.mkdir(parents=True, exist_ok=True)
+
+        # for nc_fp in tqdm(
+        #     nc_fps, desc="Checking for files for which regridding fails..."
+        # ):
+        #     cdo = Cdo()
+        #     try:
+        #         output_fp = output_dir / nc_fp.name
+        #         print(f"attempting remap of {nc_fp}...")
+        #         cdo.remapbil(
+        #             str(
+        #                 "/maps/rt582/cmipper/data/env_vars/cmip6/EC-Earth3P-HR/EC-Earth3P-HR_remap_template.txt"
+        #             ),
+        #             input=str(nc_fp),
+        #             output=str(output_fp),
+        #         )
+        #         # if successful remap, delete output file
+        #         print(f"written successfully to {output_fp}")
+        #         print("will now remove this")
+        #         legit.append(nc_fp)
+        #         os.remove(output_fp)
+        #     except Exception:
+        #         print(f"remap failed for {nc_fp}, to deleting...")
+        #         corrupt.append(nc_fp)
+        #         # os.remove(nc_fp)
+
+    # os.remove(output_dir)
+
+
+def does_nc_open(nc_fp):
+    try:
+        xa.open_dataset(nc_fp)
+        return True
+    except Exception:
+        return False
+
+
+def does_nc_have_duplicate_coords(nc_fp):
+    ds = xa.open_dataset(nc_fp)
+    # iterate through coords
+    for coord in ds.coords:
+        if utils.has_duplicates(ds[coord].values):
+            return False
+    else:
+        return True
+
+
+def process_cmip6_data(source_id, year_range, member_id):
     tic = time.time()
     print(f"TIME CREATED: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(tic))}")
 
-    concat_cmip_files_by_time(source_id, experiment_id, member_id, variable_id)
-    merge_cmip_data_by_variables(source_id, experiment_id, member_id)
+    concat_cmip_files_by_time(source_id, year_range, member_id)
+    merge_cmip_data_by_variables(source_id, year_range, member_id)
 
     dur = time.time() - tic
     print(f"\n\nTOTAL DURATION: {np.floor(dur / 60):.0f}m:{dur % 60:.0f}s\n")
@@ -547,27 +672,43 @@ def process_cmip6_data(source_id, experiment_id, member_id, variable_id):
 def main():
 
     # COMMAND LINE INPUT FROM BASH SCRIPT
-    ################################################################################
+    # ################################################################################
     parser = argparse.ArgumentParser()
 
     # model info
     source_id = parser.add_argument("--source_id", default="EC-Earth3P-HR", type=str)
     member_id = parser.add_argument("--member_id", default="r1i1p2f1", type=str)
     variable_id = parser.add_argument("--variable_id", default="tos", type=str)
+    # experiment_id = parser.add_argument(
+    #     "--experiment_id", default="hist-1950", type=str
+    # )
+    command = parser.add_argument("--command", default="download", type=str)
 
     commandline_args = parser.parse_args()
 
     source_id = commandline_args.source_id
     member_id = commandline_args.member_id
     variable_id = commandline_args.variable_id
-
+    # experiment_id = commandline_args.experiment_id
+    command = commandline_args.command
+    # command = "process"
+    # # command = "delete_corrupt_files"
     # source_id = "EC-Earth3P-HR"
+    # # experiment_id = "hist-1950"
+    year_range = [1950, 2050]
     # member_id = "r1i1p2f1"
     # variable_id = "tos"
 
+    # TODO: refine download/process using limited dict
     # DOWNLOAD DATA
     ################################################################################
-    download_cmip_variable_data(source_id, member_id, variable_id)
+    if command == "download":
+        download_cmip_variable_data(source_id, member_id, variable_id)
+    # TODO: do I want to separate these out into different functions/scripts?
+    elif command == "delete_corrupt_files":
+        delete_corrupt_files(source_id, member_id)
+    elif command == "process":
+        process_cmip6_data(source_id, year_range, member_id)
 
 
 if __name__ == "__main__":

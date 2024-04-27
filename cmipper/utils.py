@@ -149,6 +149,12 @@ def process_xa_d(
 
     if "grid_mapping" in temp_xa_d.attrs:
         del temp_xa_d.attrs["grid_mapping"]
+    # drop variables which will never be variables
+    # TODO: add as argument with default
+    drop_vars = ["time_bnds"]
+    temp_xa_d = temp_xa_d.drop_vars(
+        [var for var in drop_vars if var in temp_xa_d.variables]
+    )
     # sort coords by ascending values
     return temp_xa_d.sortby(list(temp_xa_d.dims))
 
@@ -332,6 +338,13 @@ def limit_model_info_dict(model, download):
             for var_id in source_data["variable_dict"]
         )
     }
+
+
+def has_duplicates(arr):
+    # Convert the array to a NumPy array if it's not already
+    arr = np.asarray(arr)
+    # Check if any values are duplicated
+    return len(arr) != len(np.unique(arr))
 
 
 # POTENTIAL FUTURE USE

@@ -1,5 +1,6 @@
 from pathlib import Path
 import re
+import xarray as xa
 
 from cmipper import utils, config
 
@@ -17,8 +18,12 @@ def find_files_for_area(filepaths, lat_range, lon_range):
     result = []
 
     for filepath in filepaths:
-        fp_lats, fp_lons = extract_lat_lon_ranges_from_fp(filepath)
+        # uncropped refers to global coverage
+        if "uncropped" in str(filepath):
+            result.append(filepath)
+            continue
 
+        fp_lats, fp_lons = extract_lat_lon_ranges_from_fp(filepath)
         if (
             max(lat_range) <= max(fp_lats)
             and min(lat_range) >= min(fp_lats)
@@ -70,7 +75,10 @@ def find_intersecting_cmip(
 ):
 
     # check whether intersecting cropped file already exists
-    cmip6_dir_fp = config.cmip6_data_dir / source_id / member_id
+    cmip6_dir_fp = (
+        config.cmip6_data_dir / source_id / member_id / "newtest" / "regridded"
+    )
+    # TODO: remove newtest
     # TODO: include levs check
     correct_area_fps = list(
         find_files_for_area(cmip6_dir_fp.rglob("*.nc"), lat_range=lats, lon_range=lons),
