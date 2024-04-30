@@ -25,6 +25,7 @@ __pycache__/
 
 # ignore data folder: too large for repository
 /data
+/temp_data
 
 # ignore logging: specific to user
 /logs
