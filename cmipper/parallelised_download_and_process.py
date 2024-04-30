@@ -57,8 +57,8 @@ def download_cmip_variable_data(
     This downloads a single variable, for however many experiments are specified in the source_id_dict.
     """
     # read download values
-    source_id_dict = utils.read_yaml(config.model_info)[source_id]
-    download_config_dict = utils.read_yaml(config.download_config)
+    source_id_dict = file_ops.read_yaml(config.model_info)[source_id]
+    download_config_dict = file_ops.read_yaml(config.download_config)
 
     # TODO: parallelise by source_id and member_id
     variable_id_dict = source_id_dict["variable_dict"][variable_id]
@@ -160,7 +160,7 @@ def download_cmip_variable_data(
             for i, result in enumerate(relevant_results):
                 date_range = result.split("_")[-1].split(".")[0]
 
-                fname_og = utils.FileName(
+                fname_og = file_ops.FileName(
                     variable_id=variable_id,
                     grid_type="tripolar",  # TODO: get this info from the associated dataset
                     fname_type="individual",
@@ -184,6 +184,7 @@ def download_cmip_variable_data(
                     fpaths_og[i] = save_fp
                 else:
                     # OPEN AND SELECT CORRECT PRESSURE LEVELS
+                    # TODO: differentiate between surface variable and variables with multiple pressure levels
                     if not plevel:  # if surface variable: chunk by time
                         ds = xa.open_dataset(
                             result, decode_times=True, chunks={"time": "499MB"}
@@ -251,7 +252,7 @@ def download_cmip_variable_data(
                     # initialise instance of Cdo for regridding
                     cdo = Cdo()
 
-                    fname_regrid = utils.FileName(
+                    fname_regrid = file_ops.FileName(
                         variable_id=variable_id,
                         grid_type="latlon",
                         fname_type="individual",
@@ -307,7 +308,7 @@ def download_cmip_variable_data(
                     if not cropped_dir_fp.exists():
                         cropped_dir_fp.mkdir(parents=True, exist_ok=True)
 
-                    fname_cropped = utils.FileName(
+                    fname_cropped = file_ops.FileName(
                         variable_id=variable_id,
                         grid_type="latlon",
                         fname_type="individual",
@@ -369,8 +370,8 @@ def concat_cmip_files_by_time(source_id, year_range, member_id):
     download_dir = (
         config.cmip6_data_dir / source_id / member_id
     )  # TODO: remove testing folder
-    source_id_dict = utils.read_yaml(config.model_info)[source_id]
-    download_config_dict = utils.read_yaml(config.download_config)
+    source_id_dict = file_ops.read_yaml(config.model_info)[source_id]
+    download_config_dict = file_ops.read_yaml(config.download_config)
 
     DO_CROP = download_config_dict["processing"]["do_crop"]
     LATS = sorted(download_config_dict["lats"])
@@ -428,7 +429,7 @@ def concat_cmip_files_by_time(source_id, year_range, member_id):
                 str(newest_file.name).split("_")[-1].split("-")[1].split(".")[0]
             )
         # construct name of time-concattenated file
-        fname = utils.FileName(
+        fname = file_ops.FileName(
             variable_id=variable_id,
             grid_type="latlon",
             fname_type="time_concatted",
@@ -496,8 +497,8 @@ def concat_cmip_files_by_time(source_id, year_range, member_id):
 
 def merge_cmip_data_by_variables(source_id, year_range, member_id):
     download_dir = config.cmip6_data_dir / source_id / member_id / "regridded"
-    # source_id_dict = utils.read_yaml(config.model_info)[source_id]
-    download_config_dict = utils.read_yaml(config.download_config)
+    # source_id_dict = file_ops.read_yaml(config.model_info)[source_id]
+    download_config_dict = file_ops.read_yaml(config.download_config)
 
     DO_CROP = download_config_dict["processing"]["do_crop"]
     LATS = sorted(download_config_dict["lats"])
@@ -532,7 +533,7 @@ def merge_cmip_data_by_variables(source_id, year_range, member_id):
     # sort vars in alphabetical for consistency between files
     vars.sort()
 
-    merged_fname = utils.FileName(
+    merged_fname = file_ops.FileName(
         variable_id=vars,
         grid_type="latlon",
         fname_type="var_concatted",
@@ -679,6 +680,7 @@ def main():
     source_id = parser.add_argument("--source_id", default="EC-Earth3P-HR", type=str)
     member_id = parser.add_argument("--member_id", default="r1i1p2f1", type=str)
     variable_id = parser.add_argument("--variable_id", default="tos", type=str)
+    # TODO: year range as a command line argument
     # experiment_id = parser.add_argument(
     #     "--experiment_id", default="hist-1950", type=str
     # )
