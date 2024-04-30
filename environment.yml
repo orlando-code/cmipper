@@ -44,7 +44,7 @@ dependencies:
   - hdf5=1.14.3=nompi_h4f84152_100
   - icu=73.2=h59595ed_0
   - idna=3.7=pyhd8ed1ab_0
-  - jasper=4.2.4=h536e39c_0
+  # - jasper=4.2.4=h536e39c_0
   - jsonpatch=1.33=pyhd8ed1ab_0
   - jsonpointer=2.4=py310hff52083_3
   - keyutils=1.6.1=h166bdaf_0
