@@ -1,9 +1,9 @@
  #!/bin/bash
 
-mkdir -p testlogs/cmip6_process_logs/
+mkdir -p logs/cmip6_process_logs/
 
 # EC-Earth3P-HR
-python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id mlotst --experiment_id hist-1950 --member_id r1i1p2f1 --command process > testlogs/cmip6_process_logs/mlotst_process.log 2>&1 &
+python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --member_id r1i1p2f1 --command process > logs/cmip6_process_logs/process.log 2>&1 &
 # python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id tos --member_id r1i1p2f1 > testlogs/cmip6_download_logs/tos_download.log 2>&1 &
 # python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id rsdo --member_id r1i1p2f1 > testlogs/cmip6_download_logs/rsdo_download.log 2>&1 &
 # python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id so --member_id r1i1p2f1 > testlogs/cmip6_download_logs/so_download.log 2>&1 &
@@ -35,10 +35,3 @@ python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR -
 #         eval $command
 #     done
 # done
-
-# python3 coralshift/dataloading/download_cmip6_data_parallel.py --source_id EC-Earth3P-HR --variable_id mlotst --member_id r1i1p2f1 > testlogs/cmip6_download_logs/EC-Earth3P-HR_mlotst.txt 2>&1 &
-# python3 coralshift/dataloading/download_cmip6_data_parallel.py --source_id EC-Earth3P-HR --variable_id so --member_id r1i1p2f1 > testlogs/cmip6_download_logs/EC-Earth3P-HR_so.txt 2>&1 &
-# python3 coralshift/dataloading/download_cmip6_data_parallel.py --source_id EC-Earth3P-HR --variable_id thetao --member_id r1i1p2f1 > testlogs/cmip6_download_logs/EC-Earth3P-HR_thetao.txt 2>&1 &
-# python3 coralshift/dataloading/download_cmip6_data_parallel.py --source_id EC-Earth3P-HR --variable_id uo --member_id r1i1p2f1 > testlogs/cmip6_download_logs/EC-Earth3P-HR_uo.txt 2>&1 &
-# python3 coralshift/dataloading/download_cmip6_data_parallel.py --source_id EC-Earth3P-HR --variable_id vo --member_id r1i1p2f1 > testlogs/cmip6_download_logs/EC-Earth3P-HR_vo.txt 2>&1 &
-# python3 coralshift/dataloading/download_cmip6_data_parallel.py --source_id EC-Earth3P-HR --variable_id tos --member_id r1i1p2f1 > testlogs/cmip6_download_logs/EC-Earth3P-HR_tos.txt 2>&1 &
