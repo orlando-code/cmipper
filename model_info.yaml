@@ -37,13 +37,13 @@ EC-Earth3P-HR:
       include: true
       table_id: Omon
       plevels: 
-        - null
+        - -1
     # Ocean Mass Y Transport
     vmo:
       include: true
       table_id: Omon
       plevels: 
-        - null
+        - -1
     # Ocean Mixed Layer Thickness Defined by Sigma T
     mlotst:
       include: true
