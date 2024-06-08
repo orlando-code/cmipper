@@ -57,8 +57,10 @@ def download_cmip_variable_data(
     This downloads a single variable, for however many experiments are specified in the source_id_dict.
     """
     # read download values
+    print(config.download_config)
     source_id_dict = file_ops.read_yaml(config.model_info)[source_id]
     download_config_dict = file_ops.read_yaml(config.download_config)
+    print(download_config_dict)
 
     # TODO: parallelise by source_id and member_id
     variable_id_dict = source_id_dict["variable_dict"][variable_id]
@@ -129,6 +131,7 @@ def download_cmip_variable_data(
         results = list(set(results))  # remove any duplicate values
 
         YEAR_RANGE = sorted(download_config_dict["experiment_ids"][experiment_id])
+        print(YEAR_RANGE)
         # skip any unrequired dates
         relevant_results = file_ops.find_files_for_time(results, year_range=YEAR_RANGE)
         print(
@@ -345,9 +348,9 @@ def download_cmip_variable_data(
             if flag
         ]
         message = (
-            f"Downloading/{'/'.join(actions_undertaken)}"
+            f"Searching/downloading/{'/'.join(actions_undertaken)}"
             if actions_undertaken
-            else "Downloading"
+            else "Searching/downloading"
         )
         print(
             f"\n{message} took {np.floor(download_tic / 60):.0f}m:{download_tic % 60:.0f}s."
@@ -366,12 +369,12 @@ def download_cmip_variable_data(
 ################################################################################
 
 
-def concat_cmip_files_by_time(source_id, year_range, member_id):
+def concat_cmip_files_by_time(source_id, year_range, member_id, fp_dir: Path | str = None, download_config_dict: dict = None):
     download_dir = (
         config.cmip6_data_dir / source_id / member_id
-    )  # TODO: remove testing folder
+    )  if fp_dir is None else Path(fp_dir)
     source_id_dict = file_ops.read_yaml(config.model_info)[source_id]
-    download_config_dict = file_ops.read_yaml(config.download_config)
+    download_config_dict = file_ops.read_yaml(config.download_config) if download_config_dict is None else download_config_dict
 
     DO_CROP = download_config_dict["processing"]["do_crop"]
     LATS = sorted(download_config_dict["lats"])
@@ -396,7 +399,9 @@ def concat_cmip_files_by_time(source_id, year_range, member_id):
 
     num_concatted = 0
     # fetch variable_id to fetch all files to be concatted
-    for variable_id in list(source_id_dict["variable_dict"].keys()):
+    # for variable_id in list(download_config_dict["variable_ids"].keys()):   
+    for variable_id in download_config_dict["env_vars"]:   # ham-fisted approach to allowing overwrite with config_info
+        # print("DO CROP", DO_CROP)
         if DO_CROP:
             variable_dir = (
                 download_dir
@@ -407,12 +412,21 @@ def concat_cmip_files_by_time(source_id, year_range, member_id):
         else:
             # directory with individual files for single variable
             variable_dir = download_dir / "regridded" / variable_id
+            print("variable_dir", variable_dir)
 
         # if not variable_dir.exists():
         #     print(f"{variable_dir} does not exist, skipping", flush=True)
         #     continue
 
         fps = list(variable_dir.glob("*.nc"))
+        if not DO_CROP:
+            # if not cropping, determine spatial extent of files (first should be representative of them all: otherwise
+            # we have bigger problems...)
+            min_lat, max_lat, min_lon, max_lon = file_ops.get_min_max_coords_from_xa_d(xa.open_dataset(fps[0]))
+            LATS = [min_lat, max_lat]
+            LONS = [min_lon, max_lon]
+            # print(LATS, LONS)
+
         # cast year integers to strings encompassing their months
         if YEAR_RANGE:
             oldest_date = str(min(YEAR_RANGE)) + "00"
@@ -428,6 +442,7 @@ def concat_cmip_files_by_time(source_id, year_range, member_id):
             newest_date = (
                 str(newest_file.name).split("_")[-1].split("-")[1].split(".")[0]
             )
+
         # construct name of time-concattenated file
         fname = file_ops.FileName(
             variable_id=variable_id,
@@ -457,23 +472,23 @@ def concat_cmip_files_by_time(source_id, year_range, member_id):
 
             if len(fps_within_date) == 0:
                 print(
-                    f"skipping {variable_id} since no files found between {oldest_date} and {newest_date}..."
+                    f"skipping '{variable_id}' since no files found between {oldest_date} and {newest_date}..."
                 )
                 # continue
             else:
                 if len(fps_within_date) == (YEAR_RANGE[1] - YEAR_RANGE[0]):
                     print(
-                        f"\nAll {len(fps_within_date)} expected files found for {variable_id} between {oldest_date} and {newest_date}... ",  # noqa
+                        f"\nAll {len(fps_within_date)} expected files found for '{variable_id}' between {oldest_date} and {newest_date}... ",  # noqa
                         flush=True,
                     )
                 else:
                     print(
-                        f"\n{len(fps_within_date)} files found for {variable_id} between "
+                        f"\n{len(fps_within_date)} files found for '{variable_id}' between "
                         f"{oldest_date} and {newest_date}... Is this expected, or are there files missing?",
                         flush=True,
                     )
 
-                print(f"concatenating {variable_id} files by time... ", flush=True)
+                print(f"concatenating '{variable_id}' files by time... ", flush=True)
 
                 concatted = xa.open_mfdataset(fps_within_date)
 
@@ -495,10 +510,10 @@ def concat_cmip_files_by_time(source_id, year_range, member_id):
     )
 
 
-def merge_cmip_data_by_variables(source_id, year_range, member_id):
-    download_dir = config.cmip6_data_dir / source_id / member_id / "regridded"
+def merge_cmip_data_by_variables(source_id, year_range, member_id, fp_dir: Path| str=None, download_config_dict=None):
+    download_dir = config.cmip6_data_dir / source_id / member_id / "regridded" if fp_dir is None else Path(fp_dir)
     # source_id_dict = file_ops.read_yaml(config.model_info)[source_id]
-    download_config_dict = file_ops.read_yaml(config.download_config)
+    download_config_dict = file_ops.read_yaml(config.download_config) if download_config_dict is None else download_config_dict
 
     DO_CROP = download_config_dict["processing"]["do_crop"]
     LATS = sorted(download_config_dict["lats"])
@@ -513,7 +528,8 @@ def merge_cmip_data_by_variables(source_id, year_range, member_id):
     tic = time.time()
 
     # MERGE VARIABLES
-    conc_var_dir = download_dir / "concatted_vars"
+    conc_var_dir = download_dir / "concatted_vars"  # TODO: should I write to this folder or the one above? Don't want it 
+    # getting mixed up with the other individual variable files
     if DO_CROP:
         conc_var_dir = Path(
             str(conc_var_dir)
@@ -527,14 +543,24 @@ def merge_cmip_data_by_variables(source_id, year_range, member_id):
     oldest_date = str(min(YEAR_RANGE)) + "00"
     newest_date = str(max(YEAR_RANGE) - 1) + "12"
     YEAR_RANGE_str = f"{oldest_date}-{newest_date}"
-    var_nc_fps = list(Path(conc_var_dir).glob(f"*{YEAR_RANGE_str}.nc"))
+    nc_fps = list(Path(conc_var_dir).glob(f"*{YEAR_RANGE_str}.nc"))
+    var_nc_fps = [fp for fp in nc_fps if any(var in str(fp) for var in download_config_dict["env_vars"])]
+    variables = [str(fname.name).split("_")[0] for fname in var_nc_fps]
+    # sort variables in alphabetical for consistency between files
+    variables.sort()
 
-    vars = [str(fname.name).split("_")[0] for fname in var_nc_fps]
-    # sort vars in alphabetical for consistency between files
-    vars.sort()
+    print(var_nc_fps[0])
+    print(xa.open_dataset(var_nc_fps[0]))
+
+    if not DO_CROP:
+        # if not cropping, determine spatial extent of files (first should be representative of them all: otherwise
+        # we have bigger problems...)
+        min_lat, max_lat, min_lon, max_lon = file_ops.get_min_max_coords_from_xa_d(xa.open_dataset(var_nc_fps[0]))
+        LATS = [min_lat, max_lat]
+        LONS = [min_lon, max_lon]
 
     merged_fname = file_ops.FileName(
-        variable_id=vars,
+        variable_id=variables,
         grid_type="latlon",
         fname_type="var_concatted",
         lats=LATS,
@@ -670,48 +696,76 @@ def process_cmip6_data(source_id, year_range, member_id):
     print(f"\n\nTOTAL DURATION: {np.floor(dur / 60):.0f}m:{dur % 60:.0f}s\n")
 
 
-def main():
-
-    # COMMAND LINE INPUT FROM BASH SCRIPT
-    # ################################################################################
-    parser = argparse.ArgumentParser()
-
-    # model info
-    source_id = parser.add_argument("--source_id", default="EC-Earth3P-HR", type=str)
-    member_id = parser.add_argument("--member_id", default="r1i1p2f1", type=str)
-    variable_id = parser.add_argument("--variable_id", default="tos", type=str)
-    # TODO: year range as a command line argument
-    # experiment_id = parser.add_argument(
-    #     "--experiment_id", default="hist-1950", type=str
-    # )
-    command = parser.add_argument("--command", default="download", type=str)
-
-    commandline_args = parser.parse_args()
-
-    source_id = commandline_args.source_id
-    member_id = commandline_args.member_id
-    variable_id = commandline_args.variable_id
-    # experiment_id = commandline_args.experiment_id
-    command = commandline_args.command
-    # command = "process"
-    # # command = "delete_corrupt_files"
-    # source_id = "EC-Earth3P-HR"
-    # # experiment_id = "hist-1950"
-    year_range = [1950, 2050]
-    # member_id = "r1i1p2f1"
-    # variable_id = "tos"
-
-    # TODO: refine download/process using limited dict
-    # DOWNLOAD DATA
-    ################################################################################
-    if command == "download":
-        download_cmip_variable_data(source_id, member_id, variable_id)
-    # TODO: do I want to separate these out into different functions/scripts?
-    elif command == "delete_corrupt_files":
-        delete_corrupt_files(source_id, member_id)
-    elif command == "process":
-        process_cmip6_data(source_id, year_range, member_id)
+def main(
+    source_id: str = "EC-Earth3P-HR",
+    member_id: str = "r1i1p2f1",
+    variable_id: str = "tos",
+):
+    download_cmip_variable_data(
+        source_id=source_id, member_id=member_id, variable_id="tos"
+    )
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(
+        description="Download data from CMIP source/member"
+    )
+    parser.add_argument(
+        "source_id", help="Specify CMIP source ID", default="EC-Earth3P-HR"
+    )
+    parser.add_argument("member_id", help="Specify CMIP member ID", default="r1i1p2f1")
+    parser.add_argument("variable_id", help="Specify CMIP variable ID", default="tos")
+
+    args = parser.parse_args()
+    main(
+        source_id=args.model_code,
+        member_id=args.config_fp,
+        variable_id=args.variable_id,
+    )
+    # main()
+
+# def main():
+
+#     # COMMAND LINE INPUT FROM BASH SCRIPT
+#     # ################################################################################
+#     parser = argparse.ArgumentParser()
+
+#     # model info
+#     source_id = parser.add_argument("--source_id", default="EC-Earth3P-HR", type=str)
+#     member_id = parser.add_argument("--member_id", default="r1i1p2f1", type=str)
+#     variable_id = parser.add_argument("--variable_id", default="tos", type=str)
+#     # TODO: year range as a command line argument
+#     # experiment_id = parser.add_argument(
+#     #     "--experiment_id", default="hist-1950", type=str
+#     # )
+#     command = parser.add_argument("--command", default="download", type=str)
+
+#     commandline_args = parser.parse_args()
+
+#     source_id = commandline_args.source_id
+#     member_id = commandline_args.member_id
+#     variable_id = commandline_args.variable_id
+#     # experiment_id = commandline_args.experiment_id
+#     command = commandline_args.command
+#     # command = "process"
+#     # # command = "delete_corrupt_files"
+#     # source_id = "EC-Earth3P-HR"
+#     # # experiment_id = "hist-1950"
+#     year_range = [1950, 2050]
+#     # member_id = "r1i1p2f1"
+#     # variable_id = "tos"
+
+#     # TODO: refine download/process using limited dict
+#     # DOWNLOAD DATA
+#     ################################################################################
+#     if command == "download":
+#         download_cmip_variable_data(source_id, member_id, variable_id)
+#     # TODO: do I want to separate these out into different functions/scripts?
+#     elif command == "delete_corrupt_files":
+#         delete_corrupt_files(source_id, member_id)
+#     elif command == "process":
+#         process_cmip6_data(source_id, year_range, member_id)
+
+
+# if __name__ == "__main__":
+#     main()

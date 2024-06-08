@@ -1,5 +1,6 @@
 import xarray as xa
 import numpy as np
+import re
 
 from pathlib import Path
 
@@ -7,12 +8,51 @@ from pathlib import Path
 def lat_lon_string_from_tuples(
     lats: tuple[float, float], lons: tuple[float, float], dp: int = 0
 ):
-    round_lats = iterative_to_string_list(lats, dp)
-    round_lons = iterative_to_string_list(lons, dp)
+    min_lat, max_lat = min(lats), max(lats)
+    min_lon, max_lon = min(lons), max(lons)
 
-    return (
-        f"n{max(round_lats)}_s{min(round_lats)}_w{min(round_lons)}_e{max(round_lons)}"
-    )
+    lats = [round_to_1_sf_after_decimal(min_lat), round_to_1_sf_after_decimal(max_lat)]
+    lons = [round_to_1_sf_after_decimal(min_lon), round_to_1_sf_after_decimal(max_lon)]
+
+    lats_strs = [f"s{replace_dot_with_dash(str(abs(lat)))}" if lat < 0 else f"n{replace_dot_with_dash(str(abs(lat)))}" for lat in lats]   # noqa
+    lons_strs = [f"w{replace_dot_with_dash(str(abs(lon)))}" if lon < 0 else f"e{replace_dot_with_dash(str(abs(lon)))}" for lon in lons]   # noqa
+
+    return "_".join(lats_strs + lons_strs)
+
+
+def round_to_1_sf_after_decimal(num):
+    """
+    Rounds a number to 1 significant figure after the decimal point.
+
+    Args:
+        num (float): The number to be rounded.
+
+    Returns:
+        float: The rounded number.
+
+    Examples:
+        >>> round_to_1_sf_after_decimal(3.14159)
+        3.1
+        >>> round_to_1_sf_after_decimal(10.567)
+        10.6
+        >>> round_to_1_sf_after_decimal(0.005)
+        0.0
+    """
+    parts = str(num).split('.')
+    # if there is a decimal part
+    if len(parts) == 2:
+        dec_part = parts[1]
+
+        # determine number of zeros before first non-zero digit
+        num_zeros = 0
+        for i in range(len(dec_part)):
+            if dec_part[i] == '0':
+                num_zeros += 1
+            else:
+                break
+        return float(parts[0] + '.' + num_zeros*'0' + f"{float(f"{float(dec_part):.1g}"):g}"[0])    # noqa
+    else:
+        return float(parts[0])
 
 
 def iterative_to_string_list(iter_obj: tuple, dp: int = 0):
@@ -193,6 +233,27 @@ def has_duplicates(arr):
     arr = np.asarray(arr)
     # Check if any values are duplicated
     return len(arr) != len(np.unique(arr))
+
+
+def replace_dash_with_dot(string: str):
+    return string.replace("-", ".")
+
+def replace_dot_with_dash(string: str):
+    return string.replace(".", "-")
+
+def replace_decimal_dash_with_dot(string):
+    return re.sub(r'(?<=\d)-(?=\d)', '.', string)
+
+
+def dash_process_coordinate(num_string):
+    if num_string[0] == "-":
+        if "-" in num_string[1:] and re.match(r'\d+-\d+', num_string[1:]):
+            return -float(replace_decimal_dash_with_dot(num_string[1:]))
+    # Check if the dash is sandwiched between two numbers before replacing it
+    if "-" in num_string and re.match(r'\d+-\d+', num_string):
+        return float(replace_decimal_dash_with_dot(num_string))
+    return float(num_string)
+
 
 
 # POTENTIAL FUTURE USE
