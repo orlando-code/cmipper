@@ -1,6 +1,6 @@
 Welcome to `cmipper`, your one-stop shop for downloading, regridding, spatially cropping any CMIP6 data hosted on the Earth System Grid Federation's (ESGF) node!
 
-Walkthroughs and improved function documentation are in the works.
+This is an active project: walkthroughs and improved function documentation are on their way.
 
 ## What is CMIP?
 
