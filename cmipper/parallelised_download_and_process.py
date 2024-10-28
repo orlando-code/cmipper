@@ -18,7 +18,7 @@ from cmipper import config, utils, downloading, file_ops
 Script to download monthly-averaged CMIP6 climate simulation runs from the Earth
 System Grid Federation (ESFG):
 https://esgf-node.llnl.gov/search/cmip6/.
-The simulations are regridded from latitude/longitude...
+The simulations are regridded from latitude/longitude
 
 The --source_id and --member_id command line inputs control which climate model
 and model run to download.
@@ -57,28 +57,35 @@ def download_cmip_variable_data(
     This downloads a single variable, for however many experiments are specified in the source_id_dict.
     """
     # read download values
-    print(config.download_config)
-    source_id_dict = file_ops.read_yaml(config.model_info)[source_id]
-    download_config_dict = file_ops.read_yaml(config.download_config)
-    print(download_config_dict)
+    source_id_dict = file_ops.read_yaml(config.model_info)
+    download_config_processing_dict = file_ops.read_yaml(config.download_config)[source_id]["processing"]
+    download_config_dict = file_ops.read_yaml(config.download_config)[source_id]
+
+    # limit model info to that specified in download yaml
+    source_id_dict = utils.limit_model_info_dict(source_id_dict, download_config_dict)[source_id]
 
     # TODO: parallelise by source_id and member_id
     variable_id_dict = source_id_dict["variable_dict"][variable_id]
 
-    # spatial values
-    LATS = sorted(download_config_dict["lats"])
-    LONS = sorted(download_config_dict["lons"])
-    INT_LATS = [int(lat) for lat in LATS]
-    INT_LONS = [int(lon) for lon in LONS]
-    LEVS = sorted([abs(val) for val in download_config_dict["levs"]])
-    RESOLUTION = source_id_dict["resolution"]
+    
     # processing values
-    do_regrid = download_config_dict["processing"]["do_regrid"]
-    do_delete_og = download_config_dict["processing"]["do_delete_og"]
-    do_crop = download_config_dict["processing"]["do_crop"]
+    do_regrid = download_config_processing_dict["do_regrid"]
+    do_save_og = download_config_processing_dict["do_save_og"]
+    do_crop = download_config_processing_dict["do_crop"]
+    do_regrid_on_fly = download_config_processing_dict["do_regrid_on_fly"]
+    out_grid = download_config_processing_dict["remap_to"]
+    remap_method = download_config_processing_dict["remap_method"]
 
+    if do_crop:
+        # spatial values
+        LATS = sorted(download_config_processing_dict["lats"])
+        LONS = sorted(download_config_processing_dict["lons"])
+    # INT_LATS = [int(lat) for lat in LATS]   # TODO: remove these
+    # INT_LONS = [int(lon) for lon in LONS]
+    LEVS = sorted([abs(val) for val in download_config_processing_dict["levs"]])
+    RESOLUTION = source_id_dict["resolution"]
     if do_crop and not do_regrid:
-        print("WARNING: cropping without regridding may lead to unexpected results")
+        print("WARNING: cropping without regridding may lead to unexpected results", flush=True)
 
     # file setting
     download_dir = (
@@ -89,10 +96,10 @@ def download_cmip_variable_data(
 
     tic = time.time()
 
-    print(f"TIME CREATED: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(tic))}")
-    print(f"\nProcessing data for {source_id}, {member_id}, {variable_id}\n")
+    print(f"TIME CREATED: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(tic))}", flush=True)
+    print(f"\nProcessing data for {source_id}, {member_id}, {variable_id}\n", flush=True)
 
-    # BUILD QUERY
+    # BUILD QUERY   # TODO: wrap this up
     query = {
         "source_id": source_id,
         "member_id": member_id,
@@ -110,33 +117,37 @@ def download_cmip_variable_data(
         query["grid_label"] = "gn"
 
     print("\n\n{}: ".format(variable_id), end="", flush=True)
-    print("searching ESGF servers... \n", end="", flush=True)
+    print("searching ESGF servers \n", end="", flush=True)
     results = []
 
     for experiment_id in source_id_dict["experiment_ids"]:
         query["experiment_id"] = experiment_id
 
         experiment_id_results = []
+        node_results = []
         for data_node in source_id_dict["data_nodes"]:
             query["data_node"] = data_node
             # EXECUTE QUERY
-            experiment_id_results.extend(downloading.esgf_search(**query))
-
-            # Keep looping over possible data nodes until the experiment data is found
-            if len(experiment_id_results) > 0:
-                print("\nfound {}, ".format(experiment_id), end="", flush=True)
-                results.extend(experiment_id_results)
-                break  # Break out of the loop over data nodes when data found
-
+            # experiment_id_results.extend(downloading.esgf_search(**query))
+            node_results.append(downloading.esgf_search(**query))
+            # Keep looping over possible data nodes until the experiment data is found – this isn't sufficient: some have more files than others, but may happen to have a few of the correct files floating around
+            
+        # select the node result with the most files
+        results = node_results[node_results.index(max(node_results, key=len))]
         results = list(set(results))  # remove any duplicate values
+
+            # if len(experiment_id_results) > 0:
+            #     print("\nfound {}, ".format(experiment_id), end="", flush=True)
+            #     results.extend(experiment_id_results)
+            #     break  # Break out of the loop over data nodes when data found
+
 
         YEAR_RANGE = sorted(download_config_dict["experiment_ids"][experiment_id])
         print(YEAR_RANGE)
         # skip any unrequired dates
-        relevant_results = file_ops.find_files_for_time(results, year_range=YEAR_RANGE)
+        relevant_results = file_ops.return_files_within_date_range(results, year_range=YEAR_RANGE)
         print(
-            f"""found {len(results)} files on {data_node} node of which {len(relevant_results)}
-            fall(s) within required date range.""".format(
+            f"""found {len(results)} file(s) on {data_node} node of which {len(relevant_results)} fall(s) within required date range.""".format(
                 end="", flush=True
             )
         )
@@ -145,201 +156,230 @@ def download_cmip_variable_data(
         fpaths_og = {}
         fpaths_regridded = {}
 
-        plevels = (
-            list(variable_id_dict["plevels"])
-            if not isinstance(variable_id_dict["plevels"], list)
-            else variable_id_dict["plevels"]
-        )
-        for plevel in plevels:
-            # reset indices for each level
-            seafloor_indices = None
-            failed_regrids = []
+        # plevels = (
+        #     list(variable_id_dict["plevels"])
+        #     if not isinstance(variable_id_dict["plevels"], list)
+        #     else variable_id_dict["plevels"]
+        # )
+        plevels = variable_id_dict["plevels"]
 
-            print("downloading individual files... ", flush=True)
-            ind_download_dir = download_dir / "og_grid" / variable_id
-            if not ind_download_dir.exists():
-                ind_download_dir.mkdir(parents=True, exist_ok=True)
+        chunk_schema = "auto"
+        # for plevel in plevels:  # TODO: this isn't really necessary, but need to check values list before removing
+        # reset indices for each level
+        seafloor_indices = None
+        # TODO: not taking single (lowest)
+        failed_regrids = []
+        print("downloading individual files ", flush=True)
+        ind_download_dir = download_dir / "og_grid" / variable_id
+        if not ind_download_dir.exists():
+            ind_download_dir.mkdir(parents=True, exist_ok=True)
 
-            for i, result in enumerate(relevant_results):
-                date_range = result.split("_")[-1].split(".")[0]
+        for i, result in enumerate(relevant_results):
+            print("\n", result, flush=True)
 
-                fname_og = file_ops.FileName(
-                    variable_id=variable_id,
-                    grid_type="tripolar",  # TODO: get this info from the associated dataset
-                    fname_type="individual",
-                    levs=LEVS,
-                    date_range=date_range,
-                    plevels=plevel,
-                ).construct_fname()
+            date_range = result.split("_")[-1].split(".")[0]
 
-                print(
-                    f"\n{i}: handling {fname_og}",
-                    flush=True,
-                )
+            ### LOADING/DONWLOADING FUNCTIONALITY
+            fname_og = file_ops.FileName(
+                variable_id=variable_id,
+                grid_type="tripolar",  # TODO: get this info from the associated dataset
+                fname_type="individual",
+                levs=LEVS,
+                date_range=date_range,
+                plevels=plevels,
+            ).construct_fname()
+            og_save_fp = ind_download_dir / fname_og
+            fpaths_og[i] = og_save_fp
 
-                save_fp = ind_download_dir / fname_og
+            regrid_dir_fp = download_dir / "regridded" / variable_id
+            if not regrid_dir_fp.exists():
+                regrid_dir_fp.mkdir(parents=True, exist_ok=True)
+            fname_regrid = file_ops.FileName(
+                variable_id=variable_id,
+                grid_type=out_grid,
+                fname_type="individual",
+                plevels=plevels,
+                levs=LEVS,
+                date_range=date_range,
+            ).construct_fname()
+            # add to list of regridded files
+            fpaths_regridded[i] = regrid_dir_fp / fname_regrid
 
-                if save_fp.exists():
+            # if raw downloaded file already exists, open it (for further processing)
+            if og_save_fp.exists():
+                print(f"\t{i}: existing file found at {og_save_fp}", flush=True)
+                ds = xa.open_dataset(og_save_fp)
+            # if we care about regridding
+            if do_regrid:
+                # and regridded file already exists, open it for potential further (non-regridding) processing
+                if fpaths_regridded[i].exists():
                     print(
-                        f"\t{i}: skipping download due to existing file: {save_fp}",
-                        flush=True,
+                        f"\t{i}: existing regridded file found at {fpaths_regridded[i]}", flush=True
                     )
-                    fpaths_og[i] = save_fp
-                else:
-                    # OPEN AND SELECT CORRECT PRESSURE LEVELS
-                    # TODO: differentiate between surface variable and variables with multiple pressure levels
-                    if not plevel:  # if surface variable: chunk by time
+                    ds = xa.open_dataset(fpaths_regridded[i])
+
+            # if no file already exists, download from server file and select correct level(s)
+            if not og_save_fp.exists() and not fpaths_regridded[i].exists():
+                # if chunk_schema == "auto":
+                # TRY TO DOWNLOAD, STARTING WITH AUTO AS DEFAULT
+                if chunk_schema == "auto":
+                    try:
                         ds = xa.open_dataset(
                             result, decode_times=True, chunks={"time": "499MB"}
                         )[variable_id]
-                    else:  # if seafloor or specified pressure, open with limited levels, chunked spatially
+                    except:
+                        chunk_schema = "manual"
+                        print("Dataset loading failed with auto chunking, switching to manual chunking...", flush=True)
+                
+                if not plevels:     # plevel = null: surface variable (chunk by time)
+                    if chunk_schema == "manual":  # if didn't pass auto check will need to load manually
                         ds = xa.open_dataset(
+                            result, decode_times=True, chunks={"time": 30} # TODO: adjust automatically if fails (changed down to 30 from 60)
+                        )[variable_id]
+                else:   # load chunks depending on auto or manual schema
+                    ds = xa.open_dataset(
                             result,
-                            decode_times=True,  # not all times easily decoded
-                            chunks={"i": "499MB"},
+                            decode_times=True,  # N.B. not all times easily decoded
+                            # chunks={"i": "499MB"} if chunk_schema == "auto" else {"i": 180, "j": 180},
+                            chunks = {"time": 5, "i": 360, "j": 360}
                         ).isel(lev=slice(min(LEVS), max(LEVS)))
-                        if plevel == -1:  # if seafloor
-                            if (
-                                seafloor_indices is None
-                            ):  # if seafloor indices not yet calculated, calculate
-                                print("\tdetermining seafloor indices... ", flush=True)
-                                seafloor_indices = utils.gen_seafloor_indices(
-                                    ds.isel(time=0),
-                                    var=variable_id,
-                                )
-                                seafloor_indices = np.broadcast_to(
-                                    seafloor_indices,
-                                    (
-                                        len(ds.time),
-                                        len(ds.j),
-                                        len(ds.i),
-                                    ),  # these variable names may differ by model
-                                )
 
-                            print("\textracting seafloor values...\n", flush=True)
-                            cmip6_array = utils.extract_seafloor_vals(
-                                ds[variable_id], seafloor_indices
-                            )
-                            ds[variable_id] = (["time", "j", "i"], cmip6_array)
-                        else:  # if surface
-                            print(
-                                f"extracting {plevel / 100:.03f} hPa",
-                                flush=True,
-                            )
-                            ds = ds.sel(lev=plevel)[variable_id]
+                    # EXTRACT CORRECT PRESSURE LEVEL FROM DS
+                    if plevels == -1:  # plevel == -1: seafloor
+                        ds, seafloor_indices = utils.extract_seafloor_vals(ds, variable_id, seafloor_indices)
+                    elif isinstance(plevels, tuple):    # plevel == list[float]: multiple pressure levels
+                        print(f"extracting {min(plevels) / 100:.03f} to {max(plevels) / 100:.03f} hPa", flush=True)
+                        ds = ds.sel(lev=slice(min(plevels), max(plevels)))[variable_id]
+                    elif isinstance(plevels, list):    # plevel == list[float]: multiple pressure levels                                
+                        plevels_strs = [f"{p / 100:.03f}" for p in plevels]
+                        print(f"extracting {plevels_strs} hPa pressure levels", flush=True)
+                        ds = ds.sel(plevels)[variable_id]
+                    elif isinstance(plevels, float):    # plevel == float: single pressure levelß
+                        print(f"extracting {plevels / 100:.03f} hPa", flush=True)
+                        ds = ds.sel(lev=plevels)[variable_id]
+                    else:
+                        raise ValueError("plevels must be null (indicating seafloor variable), a list of floats, a float, or -1 (indicating seafloor variable)")
 
-                    print(
-                        f"\t{i}: saving {fname_og} file: {save_fp}",
-                        flush=True,
-                    )
-                    fpaths_og[i] = save_fp
-                    # TODO: change dtype?
-                    ds.to_netcdf(save_fp)
+                #     # DOWNLOAD DS
+                #     if not plevels:  # plevel = null: surface variable (chunk by time)
+                #         try:
+                #             ds = xa.open_dataset(
+                #                 result, decode_times=True, chunks={"time": "499MB"}
+                #             )[variable_id]
+                #         except NotImplementedError:
+                #             chunk_schema = "manual"
+                #             print("Loading failed, switching to manual chunking")
 
-                if do_regrid:
-                    regrid_dir_fp = download_dir / "regridded" / variable_id
-                    if not regrid_dir_fp.exists():
-                        regrid_dir_fp.mkdir(parents=True, exist_ok=True)
+                #     else:  # plevel != null: specific or multiple pressure levels, or seafloor (chunk by space)
+
+                #         try:
+                #             ds = xa.open_dataset(
+                #                 result,
+                #                 decode_times=True,  # not all times easily decoded
+                #                 chunks={"i": "499MB"},
+                #             ).isel(lev=slice(min(LEVS), max(LEVS)))
+                #             continue
+                #         except NotImplementedError:
+                #             chunk_schema = "manual"
+                #             print("Loading failed, switching to manual chunking")
+
+
+                # if chunk_schema == "manual":
+                #     # DOWNLOAD DS
+                #     if not plevels:  # plevel = null: surface variable (chunk by time)
+                #         try:
+                #             ds = xa.open_dataset(
+                #                 result, decode_times=True, chunks={"time": 100} # TODO: optimise this chunking (altho seems pretty good already)
+                #             )[variable_id]
+                #             continue
+                #         except NotImplementedError:
+                #             print("Loading failed with manual chunking. See further error.")
+                #     else:  # plevel != null: specific or multiple pressure levels, or seafloor (chunk by space)
+                #         try:
+                #             ds = xa.open_dataset(
+                #                 result,
+                #                 decode_times=True,  # not all times easily decoded
+                #                 chunks={"i": 180},
+                #             ).isel(lev=slice(min(LEVS), max(LEVS)))
+                #         except NotImplementedError:
+                #             chunk_schema = "manual"
+                #             print("Loading failed with manual chunking. See further error.")
+
+
+            if not og_save_fp.exists() and do_save_og: 
+                print(f"\t{i}: saving {fname_og} file: {og_save_fp}", flush=True)
+                fpaths_og[i] = og_save_fp
+                # TODO: change dtype?
+                ds.to_netcdf(og_save_fp)
+
+            ### PROCESSING FUNCTIONALITY
+            if do_regrid:
+                # if regridded file does not exist, regrid
+                if not fpaths_regridded[i].exists():
                     remap_template_fp = (
                         config.cmip6_data_dir
                         / source_id
                         / f"{source_id}_remap_template.txt"
                     )
-                    if not remap_template_fp.exists():
-                        utils.generate_remapping_file(
-                            ds,
-                            remap_template_fp=remap_template_fp,
-                            resolution=RESOLUTION,
-                            out_grid="latlon",
-                        )
-                    # initialise instance of Cdo for regridding
-                    cdo = Cdo()
-
-                    fname_regrid = file_ops.FileName(
-                        variable_id=variable_id,
-                        grid_type="latlon",
-                        fname_type="individual",
-                        plevels=plevel,
-                        levs=LEVS,
-                        date_range=date_range,
-                    ).construct_fname()
-                    # add to list of regridded files
-                    fpaths_regridded[i] = regrid_dir_fp / fname_regrid
-
-                    if not fpaths_regridded[i].exists():
-                        print(f"\t{i}: regridding to {fpaths_regridded[i]}...")
-                        try:
-                            cdo.remapbil(  # TODO: different types of regridding. Will have to update filenames
-                                str(remap_template_fp),
-                                input=str(fpaths_og[i]),
-                                output=str(fpaths_regridded[i]),
-                            )
-                        except:  # noqa # TODO: find proper exception
-                            print(
-                                f"regridding failed for {fpaths_og[i]}, skipping...",
-                                flush=True,
-                            )
-                            failed_regrids.append(fpaths_og[i])
-                            continue
-                    else:
-                        print(
-                            f"\t{i}: skipping regrid due to existing file: {fpaths_regridded[i]}",
-                            flush=True,
-                        )
-                        # TODO: process_xa_d on these files then re-waving
-
-                    if do_delete_og:
-                        print(fpaths_og[i])
-                        os.remove(fpaths_og[i])
-
+                    # generate remap file if necessary
+                    remap_template_fp = utils.return_remap_template(input_file=ds, remap_template_fp=remap_template_fp, out_grid=out_grid)
+                    
+                    print(f"\t{i}: regridding to {fpaths_regridded[i]}", flush=True)
                     try:
-                        ds = xa.open_dataset(fpaths_regridded[i])
-                    except Exception as e:
+                        # remap via cdo
+                        ds = utils.cdo_remap(ds, remap_template_fp=remap_template_fp, remap_method=remap_method)
+                        # save to nc # TODO: is there a way to parallelise this further?
+                        print(f"\t{i}: saving regridded file to: {fpaths_regridded[i]}", flush=True)
+                        utils.process_xa_d(ds).to_netcdf(fpaths_regridded[i])
+                    except: # noqa # TODO: find proper exception
                         print(
-                            f"\nregridded file {fpaths_regridded[i]} appears corrupted, skipping...",
+                            f"regridding failed for {fpaths_og[i]}, skipping",
                             flush=True,
                         )
-                        print("Error: \n", e, flush=True)
-                        failed_regrids.append(fpaths_regridded[i])
+                        failed_regrids.append(fpaths_og[i])
                         continue
 
-                if do_crop:
-                    cropped_dir_name = f"cropped_{utils.lat_lon_string_from_tuples(INT_LATS, INT_LONS).upper()}"
-                    cropped_dir_fp = (
-                        download_dir / "regridded" / cropped_dir_name / variable_id
+                # if do_delete_og:
+                #     print(fpaths_og[i])
+                #     os.remove(fpaths_og[i])
+
+            if do_crop: # TODO: this should become unnecessary with dask processing?
+                cropped_dir_name = f"cropped_{utils.lat_lon_string_from_tuples(LATS, LONS).upper()}"
+                cropped_dir_fp = (
+                    download_dir / "regridded" / cropped_dir_name / variable_id
+                )
+                if not cropped_dir_fp.exists():
+                    cropped_dir_fp.mkdir(parents=True, exist_ok=True)
+
+                fname_cropped = file_ops.FileName(
+                    variable_id=variable_id,
+                    grid_type="latlon",
+                    fname_type="individual",
+                    lats=LATS,
+                    lons=LONS,
+                    levs=LEVS,
+                    plevels=plevels,
+                    date_range=date_range,
+                ).construct_fname()
+
+                cropped_save_fp = cropped_dir_fp / fname_cropped
+                if not cropped_save_fp.exists():
+                    # N.B. may be different between models, and may need to include levs
+                    ds = utils.process_xa_d(ds).sel(
+                        latitude=slice(min(LATS), max(LATS)),
+                        longitude=slice(min(LONS), max(LONS)),
                     )
-                    if not cropped_dir_fp.exists():
-                        cropped_dir_fp.mkdir(parents=True, exist_ok=True)
-
-                    fname_cropped = file_ops.FileName(
-                        variable_id=variable_id,
-                        grid_type="latlon",
-                        fname_type="individual",
-                        lats=INT_LATS,
-                        lons=INT_LONS,
-                        levs=LEVS,
-                        plevels=plevel,
-                        date_range=date_range,
-                    ).construct_fname()
-
-                    cropped_save_fp = cropped_dir_fp / fname_cropped
-                    if not cropped_save_fp.exists():
-                        # N.B. may be different between models, and may need to include levs
-                        ds = utils.process_xa_d(ds).sel(
-                            latitude=slice(min(LATS), max(LATS)),
-                            longitude=slice(min(LONS), max(LONS)),
-                        )
-                        print(
-                            f"\t{i}: saving {fname_cropped} file: {cropped_save_fp}",
-                            flush=True,
-                        )
-                        # TODO: change dtype?
-                        ds.to_netcdf(cropped_save_fp)
-                    else:
-                        print(
-                            f"\t{i}: skipping cropping due to existing file: {cropped_save_fp}",
-                            flush=True,
-                        )
+                    print(
+                        f"\t{i}: saving {fname_cropped} file: {cropped_save_fp}",
+                        flush=True,
+                    )
+                    # TODO: change dtype?
+                    ds.to_netcdf(cropped_save_fp)
+                else:
+                    print(
+                        f"\t{i}: skipping cropping due to existing file: {cropped_save_fp}",
+                        flush=True,
+                    )
 
         download_tic = time.time() - tic
         actions_undertaken = [
@@ -353,7 +393,7 @@ def download_cmip_variable_data(
             else "Searching/downloading"
         )
         print(
-            f"\n{message} took {np.floor(download_tic / 60):.0f}m:{download_tic % 60:.0f}s."
+            f"\n{message} took {np.floor(download_tic / 60):.0f}m:{download_tic % 60:.0f}s.", flush=True
         )
 
         print(
@@ -361,7 +401,7 @@ def download_cmip_variable_data(
             if len(failed_regrids) == 0
             else f"\n{len(failed_regrids)} regrid(s) failed. The following are/is likely corrupted: \n"
             + "\n".join(str(item) for item in list(set(failed_regrids)))
-            + "\n"
+            + "\n", flush=True
         )
 
 
@@ -374,13 +414,19 @@ def concat_cmip_files_by_time(source_id, year_range, member_id, fp_dir: Path | s
         config.cmip6_data_dir / source_id / member_id
     )  if fp_dir is None else Path(fp_dir)
     source_id_dict = file_ops.read_yaml(config.model_info)[source_id]
-    download_config_dict = file_ops.read_yaml(config.download_config) if download_config_dict is None else download_config_dict
+    download_config_dict = file_ops.read_yaml(config.download_config)[source_id] if download_config_dict is None else download_config_dict
+    download_config_processing_dict = file_ops.read_yaml(config.download_config)["processing"]
+
+
+    # limit model info to that specified in download yaml
+    source_id_dict = utils.limit_model_info_dict(source_id_dict, download_config_dict)
+
 
     DO_CROP = download_config_dict["processing"]["do_crop"]
     LATS = sorted(download_config_dict["lats"])
     LONS = sorted(download_config_dict["lons"])
-    INT_LATS = [int(lat) for lat in LATS]
-    INT_LONS = [int(lon) for lon in LONS]
+    # INT_LATS = [int(lat) for lat in LATS]
+    # INT_LONS = [int(lon) for lon in LONS]
     LEVS = sorted([abs(val) for val in download_config_dict["levs"]])
     YEAR_RANGE = sorted(year_range)  # TODO: include months option
     # YEAR_RANGE = download_config_dict["experiment_ids"][experiment_id]
@@ -392,7 +438,7 @@ def concat_cmip_files_by_time(source_id, year_range, member_id, fp_dir: Path | s
     if DO_CROP:
         conc_var_dir = Path(
             str(conc_var_dir)
-            + f"_{utils.lat_lon_string_from_tuples(INT_LATS, INT_LONS).upper()}"
+            + f"_{utils.lat_lon_string_from_tuples(LATS, LONS).upper()}"
         )
     if not conc_var_dir.exists():
         conc_var_dir.mkdir(parents=True, exist_ok=True)
@@ -401,18 +447,17 @@ def concat_cmip_files_by_time(source_id, year_range, member_id, fp_dir: Path | s
     # fetch variable_id to fetch all files to be concatted
     # for variable_id in list(download_config_dict["variable_ids"].keys()):   
     for variable_id in download_config_dict["env_vars"]:   # ham-fisted approach to allowing overwrite with config_info
-        # print("DO CROP", DO_CROP)
         if DO_CROP:
             variable_dir = (
                 download_dir
                 / "regridded"
-                / f"cropped_{utils.lat_lon_string_from_tuples(INT_LATS, INT_LONS).upper()}"
+                / f"cropped_{utils.lat_lon_string_from_tuples(LATS, LONS).upper()}"
                 / variable_id
             )
         else:
             # directory with individual files for single variable
             variable_dir = download_dir / "regridded" / variable_id
-            print("variable_dir", variable_dir)
+            print("variable_dir", variable_dir, flush=True)
 
         # if not variable_dir.exists():
         #     print(f"{variable_dir} does not exist, skipping", flush=True)
@@ -421,7 +466,7 @@ def concat_cmip_files_by_time(source_id, year_range, member_id, fp_dir: Path | s
         fps = list(variable_dir.glob("*.nc"))
         if not DO_CROP:
             # if not cropping, determine spatial extent of files (first should be representative of them all: otherwise
-            # we have bigger problems...)
+            # we have bigger problems)
             min_lat, max_lat, min_lon, max_lon = file_ops.get_min_max_coords_from_xa_d(xa.open_dataset(fps[0]))
             LATS = [min_lat, max_lat]
             LONS = [min_lon, max_lon]
@@ -472,23 +517,23 @@ def concat_cmip_files_by_time(source_id, year_range, member_id, fp_dir: Path | s
 
             if len(fps_within_date) == 0:
                 print(
-                    f"skipping '{variable_id}' since no files found between {oldest_date} and {newest_date}..."
+                    f"skipping '{variable_id}' since no files found between {oldest_date} and {newest_date}", flush=True
                 )
                 # continue
             else:
                 if len(fps_within_date) == (YEAR_RANGE[1] - YEAR_RANGE[0]):
                     print(
-                        f"\nAll {len(fps_within_date)} expected files found for '{variable_id}' between {oldest_date} and {newest_date}... ",  # noqa
+                        f"\nAll {len(fps_within_date)} expected files found for '{variable_id}' between {oldest_date} and {newest_date} ",  # noqa
                         flush=True,
                     )
                 else:
                     print(
                         f"\n{len(fps_within_date)} files found for '{variable_id}' between "
-                        f"{oldest_date} and {newest_date}... Is this expected, or are there files missing?",
+                        f"{oldest_date} and {newest_date} Is this expected, or are there files missing?",
                         flush=True,
                     )
 
-                print(f"concatenating '{variable_id}' files by time... ", flush=True)
+                print(f"concatenating '{variable_id}' files by time ", flush=True)
 
                 concatted = xa.open_mfdataset(fps_within_date)
 
@@ -497,7 +542,7 @@ def concat_cmip_files_by_time(source_id, year_range, member_id, fp_dir: Path | s
                     "gregorian", dim="time"
                 )  # may not be universal for all models
                 print(
-                    f"saving concatenated file to {concatted_fp}... ",
+                    f"saving concatenated file to {concatted_fp} ",
                     flush=True,
                 )
                 concatted.to_netcdf(concatted_fp)
@@ -506,7 +551,7 @@ def concat_cmip_files_by_time(source_id, year_range, member_id, fp_dir: Path | s
     time_concat_tic = time.time() - tic
     print(
         f"\nConcatenating {num_concatted} sets of variable files by time took "
-        f"{np.floor(time_concat_tic / 60):.0f}m:{time_concat_tic % 60:.0f}s.\n"
+        f"{np.floor(time_concat_tic / 60):.0f}m:{time_concat_tic % 60:.0f}s.\n", flush=True
     )
 
 
@@ -518,8 +563,8 @@ def merge_cmip_data_by_variables(source_id, year_range, member_id, fp_dir: Path|
     DO_CROP = download_config_dict["processing"]["do_crop"]
     LATS = sorted(download_config_dict["lats"])
     LONS = sorted(download_config_dict["lons"])
-    INT_LATS = [int(lat) for lat in LATS]
-    INT_LONS = [int(lon) for lon in LONS]
+    # INT_LATS = [int(lat) for lat in LATS]
+    # INT_LONS = [int(lon) for lon in LONS]
     LEVS = sorted([abs(val) for val in download_config_dict["levs"]])
     YEAR_RANGE = sorted(year_range)  # TODO: include months option
 
@@ -533,7 +578,7 @@ def merge_cmip_data_by_variables(source_id, year_range, member_id, fp_dir: Path|
     if DO_CROP:
         conc_var_dir = Path(
             str(conc_var_dir)
-            + (f"_{utils.lat_lon_string_from_tuples(INT_LATS, INT_LONS).upper()}")
+            + (f"_{utils.lat_lon_string_from_tuples(LATS, LONS).upper()}")
         )
 
     if not Path(conc_var_dir).exists():
@@ -554,7 +599,7 @@ def merge_cmip_data_by_variables(source_id, year_range, member_id, fp_dir: Path|
 
     if not DO_CROP:
         # if not cropping, determine spatial extent of files (first should be representative of them all: otherwise
-        # we have bigger problems...)
+        # we have bigger problems)
         min_lat, max_lat, min_lon, max_lon = file_ops.get_min_max_coords_from_xa_d(xa.open_dataset(var_nc_fps[0]))
         LATS = [min_lat, max_lat]
         LONS = [min_lon, max_lon]
@@ -574,7 +619,7 @@ def merge_cmip_data_by_variables(source_id, year_range, member_id, fp_dir: Path|
     merged_fp = conc_var_dir / merged_fname
     if not merged_fp.exists():
         print(
-            f"\nmerging variable files and saving to {merged_fp}... ",
+            f"\nmerging variable files and saving to {merged_fp} ",
             flush=True,
         )
         dss = [xa.open_dataset(fp) for fp in var_nc_fps]
@@ -583,7 +628,7 @@ def merge_cmip_data_by_variables(source_id, year_range, member_id, fp_dir: Path|
 
         var_concat_tic = time.time() - tic
         print(
-            f"\nMerging files by variable took {np.floor(var_concat_tic / 60):.0f}m:{var_concat_tic % 60:.0f}s."
+            f"\nMerging files by variable took {np.floor(var_concat_tic / 60):.0f}m:{var_concat_tic % 60:.0f}s.", flush=True
         )
     else:
         print(
@@ -615,95 +660,88 @@ def delete_corrupt_files(source_id, member_id):
         for nc_fp in tqdm(
             nc_fps,
             total=len(nc_fps),
-            desc=f"Checking for corrupt files in {variable_dir.name} directory...",
+            desc=f"Checking for corrupt files in {variable_dir.name} directory",
         ):
-            if does_nc_open(nc_fp):
+            if utils.does_nc_open(nc_fp):
                 legit.append(nc_fp)
             else:
                 corrupt.append(nc_fp)
-                print(f"file {nc_fp} does not open. Removing...")
+                print(f"file {nc_fp} does not open. Removing...", flush=True)
                 os.remove(nc_fp)
 
     # check for and remove duplicate time values
     for nc_fp in tqdm(
         legit,
-        desc="Checking for duplicate time values indicating download failure...",
+        desc="Checking for duplicate time values indicating download failure",
     ):
-        if does_nc_have_duplicate_coords(nc_fp):
+        if utils.does_nc_have_duplicate_coords(nc_fp):
             corrupt.append(nc_fp)
-            print(f"file {nc_fp} has duplicated coordinate values. Removing...")
+            print(f"file {nc_fp} has duplicated coordinate values. Removing...", flush=True)
             os.remove(nc_fp)
 
     if len(corrupt) > 0:
-        print(f"\n\n{len(corrupt)} corrupt files found and removed:\n")
-        print("It is recommended to re-run the download process.")
-        # if not output_dir.exists():
-        #     output_dir.mkdir(parents=True, exist_ok=True)
-
-        # for nc_fp in tqdm(
-        #     nc_fps, desc="Checking for files for which regridding fails..."
-        # ):
-        #     cdo = Cdo()
-        #     try:
-        #         output_fp = output_dir / nc_fp.name
-        #         print(f"attempting remap of {nc_fp}...")
-        #         cdo.remapbil(
-        #             str(
-        #                 "/maps/rt582/cmipper/data/env_vars/cmip6/EC-Earth3P-HR/EC-Earth3P-HR_remap_template.txt"
-        #             ),
-        #             input=str(nc_fp),
-        #             output=str(output_fp),
-        #         )
-        #         # if successful remap, delete output file
-        #         print(f"written successfully to {output_fp}")
-        #         print("will now remove this")
-        #         legit.append(nc_fp)
-        #         os.remove(output_fp)
-        #     except Exception:
-        #         print(f"remap failed for {nc_fp}, to deleting...")
-        #         corrupt.append(nc_fp)
-        #         # os.remove(nc_fp)
-
-    # os.remove(output_dir)
-
-
-def does_nc_open(nc_fp):
-    try:
-        xa.open_dataset(nc_fp)
-        return True
-    except Exception:
-        return False
-
-
-def does_nc_have_duplicate_coords(nc_fp):
-    ds = xa.open_dataset(nc_fp)
-    # iterate through coords
-    for coord in ds.coords:
-        if utils.has_duplicates(ds[coord].values):
-            return False
-    else:
-        return True
+        print(f"\n\n{len(corrupt)} corrupt files found and removed:\n", flush=True)
+        print("It is recommended to re-run the download process.", flush=True)
 
 
 def process_cmip6_data(source_id, year_range, member_id):
     tic = time.time()
-    print(f"TIME CREATED: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(tic))}")
+    print(f"TIME CREATED: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(tic))}", flush=True)
 
     concat_cmip_files_by_time(source_id, year_range, member_id)
     merge_cmip_data_by_variables(source_id, year_range, member_id)
 
     dur = time.time() - tic
-    print(f"\n\nTOTAL DURATION: {np.floor(dur / 60):.0f}m:{dur % 60:.0f}s\n")
+    print(f"\n\nTOTAL DURATION: {np.floor(dur / 60):.0f}m:{dur % 60:.0f}s\n", flush=True)
 
 
 def main(
     source_id: str = "EC-Earth3P-HR",
-    member_id: str = "r1i1p2f1",
+    member_id: str = "r1i1p1f1",    # TODO: not really necessary
     variable_id: str = "tos",
 ):
     download_cmip_variable_data(
-        source_id=source_id, member_id=member_id, variable_id="tos"
+        source_id=source_id, member_id=member_id, variable_id=variable_id
     )
+    # TODO: add processing
+
+
+def generate_bash_commands(source_id_dict: dict = None, download_config_dict: dict = None):
+    log_dir = config.logging_dir
+    script = "/maps/rt582/cmipper/cmipper/parallelised_download_and_process.py" # TODO make this agnostic of the d
+
+    source_id_dict = file_ops.read_yaml(config.model_info) if source_id_dict is None else source_id_dict
+    download_config_dict = file_ops.read_yaml(config.download_config) if download_config_dict is None else download_config_dict
+
+    commands = []
+    mkdirs = []
+    source_ids = source_id_dict.keys()
+        # lim_source_id_dict = utils.limit_model_info_dict(source_id_dict, download_config_dict)
+    lim_source_id_dict = utils.extract_matching_subsets(download_config_dict, source_id_dict)
+    for source_id in lim_source_id_dict.keys():
+
+        member_ids = lim_source_id_dict[source_id]["member_ids"]
+        for member_id in member_ids:
+            dl_log_dir = f"{log_dir}/{source_id}/{member_id}"
+            mkdirs.append(f"mkdir -p {dl_log_dir}")
+            variable_ids = lim_source_id_dict[source_id]["variable_dict"]
+            for variable_id in variable_ids:
+                log_fn = f"{variable_id}_download.log"
+                log_fp = f"{dl_log_dir}/{log_fn}"
+                # command = f"python3 {script} --source_id {source_id} --variable_id {variable_id} --member_id {member_id} > {log_fp} 2>&1 &"
+                command = f"python3 {script} {source_id} {member_id} {variable_id} > {log_fp} 2>&1 &"
+                commands.append(command)
+
+    # Write commands to a bash script
+    with open('run_commands.sh', 'w') as file:
+
+        file.write("#!/bin/bash\n\n")
+        # file.write(f"mkdir -p {log_dir}\n\n")
+        for mkdir in mkdirs:
+            file.write(mkdir + "\n")
+        file.write("\n")
+        for command in commands:
+            file.write(command + "\n")
 
 
 if __name__ == "__main__":
@@ -717,12 +755,17 @@ if __name__ == "__main__":
     parser.add_argument("variable_id", help="Specify CMIP variable ID", default="tos")
 
     args = parser.parse_args()
+    print(args.source_id)
+    # main(
+    #     source_id=args.model_code,
+    #     member_id=args.config_fp,
+    #     variable_id=args.variable_id,
+    # )
     main(
-        source_id=args.model_code,
-        member_id=args.config_fp,
+        source_id=args.source_id,
+        member_id=args.member_id,
         variable_id=args.variable_id,
     )
-    # main()
 
 # def main():
 
