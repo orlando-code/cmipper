@@ -1,9 +1,9 @@
  #!/bin/bash
 
-mkdir -p logs/cmip6_process_logs/
+mkdir -p testlogs/cmip6_process_logs/
 
 # EC-Earth3P-HR
-python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --member_id r1i1p2f1 --command process > logs/cmip6_process_logs/process.log 2>&1 &
+# python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --member_id r1i1p2f1 --command process > logs/cmip6_process_logs/process.log 2>&1 &
 # python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id tos --member_id r1i1p2f1 > testlogs/cmip6_download_logs/tos_download.log 2>&1 &
 # python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id rsdo --member_id r1i1p2f1 > testlogs/cmip6_download_logs/rsdo_download.log 2>&1 &
 # python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR --variable_id so --member_id r1i1p2f1 > testlogs/cmip6_download_logs/so_download.log 2>&1 &
@@ -18,11 +18,17 @@ python3 cmipper/parallelised_download_and_process.py --source_id EC-Earth3P-HR -
 
 # POTENTIAL AUTOMATION
 # # Read values from YAML config file
-# yaml_config_file_path="download_config.yaml"
+yaml_config_file_path="/maps/rt582/cmipper/download_config.yaml"
 
 # source_id = EC-Earth3P-HR
-# variable_ids=$(yaml_config_file_path variable_ids)
-# member_ids=$(yaml_config_file_path member_ids)
+source_ids=$(grep -oP '(?<=source_ids:\s)\S+' $yaml_config_file_path)
+variable_ids=$(grep -oP '(?<=variable_ids:\s)\S+' $yaml_config_file_path)
+member_ids=$(grep -oP '(?<=member_ids:\s)\S+' $yaml_config_file_path)
+
+# print the source_ids
+echo $source_ids
+echo $member_ids
+echo $variable_ids
 
 # # Iterate over variable IDs
 # for variable_id in $variable_ids; do
