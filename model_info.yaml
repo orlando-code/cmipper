@@ -24,66 +24,238 @@ EC-Earth3P-HR:
     hfds:
       include: true
       table_id: Omon
-      plevels: 
-        - null  # surface variable. May automate this more e.g lookup dict of surface/levels var
+      plevels: null  # surface variable. May automate this more e.g lookup dict of surface/levels var
     # Downwelling Shortwave Radiation in Sea Water
     rsdo:
       include: true
       table_id: Omon
-      plevels:
-        - -1
+      plevels: -1
     # Ocean Mass X Transport
     umo:
       include: true
       table_id: Omon
-      plevels: 
-        - -1
+      plevels: -1
     # Ocean Mass Y Transport
     vmo:
       include: true
       table_id: Omon
-      plevels: 
-        - -1
+      plevels: -1
     # Ocean Mixed Layer Thickness Defined by Sigma T
     mlotst:
       include: true
       table_id: Omon
-      plevels:
-        - null  # N.B. could streamline so could be included as a single value rather than a list
+      plevels: null  # N.B. could streamline so could be included as a single value rather than a list
     # Sea Water Salinity
     so:
       include: true
       table_id: Omon
-      plevels:
-        - -1
+      plevels: -1
     # Sea Water Potential Temperature
     thetao:
       include: true
       table_id: Omon
-      plevels:
-        - -1
+      plevels: -1
     # Sea Water X Velocity
     uo:
       include: true
       table_id: Omon
-      plevels:
-        - -1
+      plevels: -1
     # Sea Water Y Velocity
     vo:
       include: true
       table_id: Omon
-      plevels:
-        - -1
+      plevels: -1
     # Water Flux into Sea Water
     wfo:
       include: true
       table_id: Omon
-      plevels: 
-        - null
+      plevels: null
     # Sea Surface Temperature
     tos:
       include: true
       table_id: Omon  # also available at 3hr
-      plevels:
-        - null
+      plevels: null
 
+MPI-ESM1-2-HR:
+  resolution: 0.5
+  experiment_ids:
+    - historical
+    # - ssp126
+    # - ssp245
+    # - ssp370
+    # - ssp585
+  member_ids:
+    - r1i1p1f1
+    # - r2i1p1f1
+    # - r3i1p1f1
+    # - r4i1p1f1
+    # - r5i1p1f1
+    # - r6i1p1f1
+    # - r7i1p1f1
+    # - r8i1p1f1
+    # - r9i1p1f1
+    # - r10i1p1f1
+  data_nodes:
+    - esgf-data1.llnl.gov
+    - esgf.ceda.ac.uk # more errors (curl)
+    - esgf3.dkrz.de # calling url throws errors
+    - cmip.bcc.cma.cn  # listed in metadata from https://esgf-node.llnl.gov/search/cmip6/
+  frequency: mon
+  # Dictionary containing variable information
+  variable_dict:
+    # Downward Heat Flux at Sea Water Surface
+    no3:
+      include: true
+      table_id: Omon
+      plevels: -1  # seafloor variable
+    po4:
+      include: true
+      table_id: Omon
+      plevels: -1  # seafloor variable
+    dissic:
+      include: true
+      table_id: Omon
+      plevels: -1  # seafloor variable
+
+AWI-CM-1-1-MR:
+  resolution: 0.25
+  experiment_ids:
+    - historical
+    - ssp126
+    - ssp245
+    - ssp370
+    - ssp585
+  member_ids:
+    - r1i1p1f1
+    # - r2i1p1f1
+    # - r3i1p1f1
+    # - r4i1p1f1
+    # - r5i1p1f1
+    # - r6i1p1f1
+    # - r7i1p1f1
+    # - r8i1p1f1
+    # - r9i1p1f1
+    # - r10i1p1f1
+  data_nodes:
+    - esgf-data1.llnl.gov
+    - esgf.ceda.ac.uk # more errors (curl)
+    - esgf3.dkrz.de # calling url throws errors
+    - cmip.bcc.cma.cn  # listed in metadata from https://esgf-node.llnl.gov/search/cmip6/
+  frequency: mon
+  # Dictionary containing variable information
+  variable_dict:
+    # Downward Heat Flux at Sea Water Surface
+    hfds:
+      include: true
+      table_id: Omon
+      plevels: null  # surface variable. May automate this more e.g lookup dict of surface/levels var
+    # Downwelling Shortwave Radiation in Sea Water
+    rsdo:
+      include: true
+      table_id: Omon
+      plevels: -1
+    # Ocean Mixed Layer Thickness Defined by Sigma T
+    mlotst:
+      include: true
+      table_id: Omon
+      plevels: null  # N.B. could streamline so could be included as a single value rather than a list
+    # Sea Water Salinity
+    so:
+      include: true
+      table_id: Omon
+      plevels: -1
+    # Sea Water Potential Temperature
+    thetao:
+      include: true
+      table_id: Omon
+      plevels: -1
+    # Sea Water X Velocity
+    uo:
+      include: true
+      table_id: Omon
+      plevels: -1
+    # Sea Water Y Velocity
+    vo:
+      include: true
+      table_id: Omon
+      plevels: -1
+    # Water Flux into Sea Water
+    wfo:
+      include: true
+      table_id: Omon
+      plevels: null
+    # Sea Surface Temperature
+    tos:
+      include: true
+      table_id: Omon  # also available at 3hr
+      plevels: null
+
+
+HadGEM3-GC31-MM:
+  resolution: 0.25
+  experiment_ids:
+    - historical
+    - ssp126
+    - ssp245
+    - ssp370
+    - ssp585
+  member_ids:
+    - r1i1p1f3
+    - r2i1p1f3
+    - r3i1p1f3
+    - r4i1p1f3
+  data_nodes:
+    - esgf-data1.llnl.gov
+    - esgf.ceda.ac.uk # more errors (curl)
+    - esgf3.dkrz.de # calling url throws errors
+    - cmip.bcc.cma.cn  # listed in metadata from https://esgf-node.llnl.gov/search/cmip6/
+  frequency: mon
+  # Dictionary containing variable information
+  variable_dict:
+    # Downward Heat Flux at Sea Water Surface
+    hfds:
+      include: true
+      table_id: Omon
+      plevels: null
+        # - null  # surface variable. May automate this more e.g lookup dict of surface/levels var
+    # Downwelling Shortwave Radiation in Sea Water
+    rsdo:
+      include: true
+      table_id: Omon
+      plevels: -1
+    # Ocean Mixed Layer Thickness Defined by Sigma T
+    mlotst:
+      include: true
+      table_id: Omon
+      plevels: null
+        # - null  # N.B. could streamline so could be included as a single value rather than a list
+    # Sea Water Salinity
+    so:
+      include: true
+      table_id: Omon
+      plevels: -1
+    # Sea Water Potential Temperature
+    thetao:
+      include: true
+      table_id: Omon
+      plevels: -1
+    # Sea Water X Velocity
+    uo:
+      include: true
+      table_id: Omon
+      plevels: -1
+    # Sea Water Y Velocity
+    vo:
+      include: true
+      table_id: Omon
+      plevels: -1
+    # Water Flux into Sea Water
+    wfo:
+      include: true
+      table_id: Omon
+      plevels: null
+    # Sea Surface Temperature
+    tos:
+      include: true
+      table_id: Omon  # also available at 3hr
+      plevels: null
