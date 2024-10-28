@@ -1,35 +1,129 @@
-variable_ids:
-  # - hfds
-  - rsdo
-  - umo
-  - vmo
-  - mlotst
-  - so
-  - thetao
-  - uo
-  - vo
-  - wfo
-  - tos
-member_ids:
-  - r1i1p2f1
-  # - r3i1p2f1
-experiment_ids:
-  hist-1950:
-    - 1950
-    - 2015
-  highres-future:
-    - 2015
-    - 2050
-lats:
-  - -32
-  - -0
-lons:
-  - 130
-  - 170
-levs:
-  - 0
-  - 20
-processing:
-  do_regrid: true
-  do_delete_og: false
-  do_crop: true
+# EC-Earth3P-HR:
+#   variable_ids:
+#     - hfds
+#     - rsdo
+#     - mlotst
+#     - so
+#     - thetao
+#     - uo
+#     - vo
+#     - wfo
+#     - tos
+#   member_ids:
+#     - r1i1p2f1
+#   experiment_ids:
+#     hist-1950:
+#       - 1950
+#       - 2015
+#     highres-future:
+#       - 2015
+#       - 2050
+#   lats:
+#     - -32
+#     - -0
+#   lons:
+#     - 130
+#     - 170
+#   levs:
+#     - 0
+#     - 20
+#   processing:
+#     do_regrid: true
+#     do_delete_og: false
+
+# MPI-ESM1-2-HR:
+#   variable_ids:
+#     - no3
+#     - po4
+#     - dissic
+#   member_ids:
+#     - r1i1p1f1
+#     # - r3i1p2f1
+#   experiment_ids:
+#     historical:
+#       - 1850
+#       - 2015
+#   processing:
+#     do_regrid: true
+#     do_regrid_on_fly: true
+#     do_save_og: false
+#     do_delete_og: false
+#     do_crop: false
+#     remap_to: "latlon"
+#     remap_method: "bilinear"
+#     lats:
+#       - -10
+#       - -0
+#     lons:
+#       - 130
+#       - 140
+#     levs:
+#       - 0
+#       - 20
+
+# AWI-CM-1-1-MR:  # WEIRD GRID
+#   variable_ids:
+#     - hfds
+#     - rsdo
+#     - mlotst
+#     - so
+#     - thetao
+#     - uo
+#     - vo
+#     - wfo
+#     - tos
+#   member_ids:
+#     - r1i1p1f1
+#     # - r3i1p2f1
+#   experiment_ids:
+#     historical:
+#       - 1850
+#       - 2015
+#   processing:
+#     do_regrid: true
+#     do_regrid_on_fly: true
+#     do_save_og: false
+#     do_delete_og: false
+#     do_crop: false
+#     remap_to: "latlon"
+#     remap_method: "bilinear"
+#     lats:
+#       - -10
+#       - -0
+#     lons:
+#       - 130
+#       - 140
+#     levs:
+#       - 0
+#       - 20
+
+
+HadGEM3-GC31-MM:
+  variable_ids:
+    - hfds
+    - rsdo
+    - mlotst
+    - so
+    - thetao
+    - uo
+    - vo
+    - wfo
+    - tos
+  member_ids:
+    - r1i1p1f3
+    # - r3i1p2f1
+  experiment_ids:
+    historical:
+      - 1850
+      - 2015
+  processing:
+    do_regrid: true
+    do_regrid_on_fly: true
+    do_save_og: true
+    do_delete_og: false
+    do_crop: false
+    remap_to: "latlon"
+    remap_method: "bilinear"
+    levs:
+      - 0
+      - 20
