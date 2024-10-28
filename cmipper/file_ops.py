@@ -9,13 +9,27 @@ import yaml
 import concurrent.futures
 
 
-def find_files_for_time(filepaths, year_range):
+def return_date_range_from_fp(fp):
+    start_year = int(str(fp).split("_")[-1].split("-")[0][:4])
+    end_year = (
+        int(str(fp).split("_")[-1].split("-")[1][:4]) + 1
+    )  # +1: XXXX12 = full XXXX year
+    return start_year, end_year
+
+
+def return_files_within_date_range(filepaths, year_range):
     result = []
     for fp in filepaths:
-        start_year = int(str(fp).split("_")[-1].split("-")[0][:4])
-        end_year = (
-            int(str(fp).split("_")[-1].split("-")[1][:4]) + 1
-        )  # +1: XXXX12 = full XXXX year
+        start_year, end_year = return_date_range_from_fp(fp)
+        if (min(year_range) <= start_year) and (max(year_range)) >= end_year:
+            result.append(fp)
+    return result
+
+
+def return_files_spanning_date_range(filepaths, year_range):
+    result = []
+    for fp in filepaths:
+        start_year, end_year = return_date_range_from_fp(fp)
         if (min(year_range) >= start_year) and (max(year_range)) <= end_year:
             result.append(fp)
     return result
@@ -314,7 +328,7 @@ def find_intersecting_cmip(
         find_files_for_area(cmip6_dir_fp.rglob("*.nc"), lat_range=lats, lon_range=lons),
     )
     # check that also spans full year range
-    correct_fps = find_files_for_time(correct_area_fps, year_range=sorted(year_range))
+    correct_fps = return_files_spanning_date_range(correct_area_fps, year_range=sorted(year_range))
 
     if len(correct_fps) > 0:
         # check that file includes all variables in variables list
