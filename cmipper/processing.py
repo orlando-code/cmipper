@@ -190,7 +190,7 @@ def gen_seafloor_indices(xa_d: xa.Dataset, var: str, dim: str = "lev"):
     return indices_array.values  # Convert to NumPy array
 
 
-def reproject_xa_d(xa_d: xa.Dataset | xa.DataArray, ds_fp: str | Path, output_grid: str, remap_method: str) -> xa.Dataset:
+def reproject_xa_d(xa_d: xa.Dataset | xa.DataArray, ds_fp: str | Path, output_grid: str, remap_method: str="linear") -> xa.Dataset:
     # check if remap template exists in directory
     # get directory
     dir_fp = Path(ds_fp).parent
