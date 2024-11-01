@@ -103,12 +103,17 @@ def gen_seafloor_indices(xa_d: xa.Dataset, var: str, dim: str = "lev"):
         indices_array (np.ndarray): array of indices of seafloor values for given variable
     """
     print("\ndetermining seafloor indices... ", flush=True)
-
-    valid_mask = ~np.isnan(xa_d[var])
-    seafloor_indices = xa.where(valid_mask, xa_d[dim], -1)  # Replace NaNs with -1
+    # if 'time' in xa_d.dims (seafloor indices are constant in time):
+    time_slice = xa_d.isel(time=0)
+    
+    valid_mask = ~np.isnan(time_slice[var])
+    seafloor_indices = xa.where(valid_mask, time_slice[dim], -1)  # Replace NaNs with -1
     indices_array = seafloor_indices.argmax(dim=dim)
     # Set indices to -1 where no valid levels were found
     indices_array = indices_array.where(valid_mask.any(dim=dim), -1)
+    
+    # broadcast to all time slices
+    indices_array = indices_array.expand_dims({"time": xa_d.time})
 
     return indices_array.values  # Convert to NumPy array
 
