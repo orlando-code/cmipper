@@ -19,7 +19,7 @@ def check_lev_exists(file_path):
         return False
     
 
-def extract_dataset_at_level_xarray(file_path: str | Path, select_level: int | list | tuple) -> xa.Dataset:
+def extract_dataset_at_level(file_path: str | Path, select_level: int | list | tuple) -> xa.Dataset:
     """Extract a dataset at a given pressure level index using xarray.
     
     Args:
