@@ -19,12 +19,16 @@ def check_lev_exists(file_path):
         return False
     
 
-def extract_dataset_at_level_xarray(file_path: str | Path, level_index: int | list | tuple) -> xa.Dataset:
+def extract_dataset_at_level_xarray(file_path: str | Path, select_level: int | list | tuple) -> xa.Dataset:
     """Extract a dataset at a given pressure level index using xarray.
     
     Args:
         file_path (str | Path): path to the netCDF file
-        level_index (int): index of the pressure level to extract
+        select_level (int | list | tuple): specify pressure level(s) to extract.
+            * -1: seafloor values
+            * int: pressure level index
+            * float: closest pressure level
+            * list/tuple: range of pressure levels
     
     Returns:
         xa.Dataset: dataset containing variables at the specified pressure level
@@ -34,31 +38,31 @@ def extract_dataset_at_level_xarray(file_path: str | Path, level_index: int | li
     """ 
     try:
         ds = xa.open_dataset(file_path)
-        # dictionary to hold sliced variables
         data_at_level = {}
-        if 'lev' in ds.dims:
-            for var_name in ds.data_vars:
-                if var_name == "lev_bnds":  # skip 'lev_bnds' variable (has 'lev' dim but isn't variable of interest)
+
+        if 'lev' in ds.dims:    # if the dataset has a 'lev' dimension, continue to extract
+            for var_name, var_data in ds.data_vars.items():
+                if var_name == "lev_bnds":
                     continue
-                if 'lev' in ds[var_name].dims:  # ensure the variable has the 'lev' dimension
-                    if level_index == -1:  # extract values at seafloor
+
+                if 'lev' in var_data.dims:
+                    if select_level == -1:  # select seafloor values
                         ds = extract_seafloor_vals_from_ds(ds, var_name)
                         data_at_level[var_name] = ds[var_name]
-                    else:
+                    else:   # anything but seafloor values
                         try:
-                            if isinstance(level_index, (tuple, list)):
-                                data_at_level[var_name] = ds[var_name].isel(lev=slice(min(level_index), max(level_index)))
-                            else:
-                                data_at_level[var_name] = ds[var_name].isel(lev=level_index)
+                            if isinstance(select_level, (tuple, list)): # if select_level is a range
+                                data_at_level[var_name] = var_data.isel(lev=slice(min(select_level), max(select_level)))
+                            else:   # if select_level is a float, return closest value; if an int, return that level index
+                                data_at_level[var_name] = var_data.sel(lev=select_level, method="nearest") if isinstance(select_level, float) else var_data.isel(lev=select_level)
                         except IndexError:
-                            print(f"{level_index} is out of bounds. Returning surface values instead...")
-                            data_at_level[var_name] = ds[var_name].isel(lev=0)
-                else:   # if the variable does not have 'lev' dimension, include as is
-                    data_at_level[var_name] = ds[var_name]
-        else:   # if 'lev' dimension is missing, add all variables as is
-            data_at_level = {var_name: ds[var_name] for var_name in ds.data_vars}
+                            print(f"{select_level} is out of bounds. Returning surface values instead...")
+                            data_at_level[var_name] = var_data.isel(lev=0)
+                else:
+                    data_at_level[var_name] = var_data
+        else:   # if no 'lev' dimension, return all data
+            data_at_level = {var_name: var_data for var_name, var_data in ds.data_vars.items()}
 
-        # return a new dataset containing only the extracted variables
         return xa.Dataset(data_at_level)
 
     except Exception as e:
