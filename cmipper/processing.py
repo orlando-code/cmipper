@@ -8,6 +8,9 @@ from tqdm.auto import tqdm
 import xarray as xa
 from netCDF4 import Dataset
 
+# custom
+from cmipper import utils
+
 
 def check_lev_exists(file_path):
     """Check if the file has a 'lev' dimension or variable without loading it all into memory."""
@@ -19,7 +22,7 @@ def check_lev_exists(file_path):
         return False
     
 
-def extract_dataset_at_level(file_path: str | Path, select_level: int | list | tuple) -> xa.Dataset:
+def extract_dataset_level(file_path: str | Path, select_level: int | list | tuple) -> xa.Dataset:
     """Extract a dataset at a given pressure level index using xarray.
     
     Args:
@@ -185,3 +188,19 @@ def gen_seafloor_indices(xa_d: xa.Dataset, var: str, dim: str = "lev"):
     indices_array = indices_array.expand_dims({"time": xa_d.time})
 
     return indices_array.values  # Convert to NumPy array
+
+
+def reproject_xa_d(xa_d: xa.Dataset | xa.DataArray, ds_fp: str | Path, output_grid: str, remap_method: str) -> xa.Dataset:
+    # check if remap template exists in directory
+    # get directory
+    dir_fp = Path(ds_fp).parent
+    # look for text file with "template" in name
+    remap_template_fps = list(dir_fp.glob("*_remap_template*"))
+    if len(remap_template_fps) > 0:    # if remap template exists
+        print("Using existing remapping template at ", remap_template_fps[0])
+        remap_template_fp = remap_template_fps[0]
+    else:   # else generate
+        remap_template_fp = dir_fp / f"{output_grid}_remap_template.txt"
+        remap_template_fp = utils.return_remap_template(input_file=xa_d, remap_template_fp=remap_template_fp, out_grid=output_grid)
+
+    return utils.process_xa_d(utils.cdo_remap(xa_d, remap_template_fp=remap_template_fp, remap_method=remap_method))
