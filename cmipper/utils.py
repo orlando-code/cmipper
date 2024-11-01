@@ -187,6 +187,7 @@ def generate_remap_info(eg_nc, resolutions: tuple[float]=None):
 
     # [-180, 180] longitudinal range
     max_lon = np.max(eg_nc.longitude.values)
+    min_lon = np.min(eg_nc.longitude.values)
     if max_lon > 180:   # no better way to check this without providing explicit argument
         min_lon -= 180
     else:
@@ -241,7 +242,6 @@ def cdo_remap_fly(input_object: str | xa.Dataset, resolutions: tuple[float]=None
 def cdo_remap(input_object: str | xa.Dataset, remap_template_fp: str=None, remap_method: str="bilinear"):
     cdo = Cdo()
     if remap_method == "bilinear":
-        print("linear")
         return cdo.remapbil(remap_template_fp, input=input_object, returnXDataset=True)
     elif remap_method == "bicubic":
         return cdo.remapbic(remap_template_fp, input=input_object, returnXDataset=True)
