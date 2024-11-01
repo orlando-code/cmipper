@@ -33,3 +33,6 @@ __pycache__/
 
 # esgpull
 /.esgpull
+
+# temporary files
+/tmp
