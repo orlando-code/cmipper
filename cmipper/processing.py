@@ -73,9 +73,9 @@ def extract_dataset_level(file_path: str | Path, select_level: int | list | tupl
         return None
 
 
-def load_dataset_with_dask(file_path: str | Path) -> xa.Dataset:
+def load_dataset_with_dask(file_path: str | Path, chunk_schema: dict | str={"time": 1}) -> xa.Dataset:
     """Load a dataset using xarray with dask for parallel processing. Leave spatial chunking as automatic"""
-    return xa.open_dataset(file_path, chunks={"time": 1})
+    return xa.open_dataset(file_path, chunks=chunk_schema)
 
 
 def find_seafloor_indices_for_directory(raw_data_dir_fp: Path):
@@ -92,19 +92,23 @@ def find_seafloor_indices_for_directory(raw_data_dir_fp: Path):
 
     # Iterate through all .nc files in the directory
     for nc_file in directory.glob('**/*.nc'):
-        ds = load_dataset_with_dask(nc_file)
-        # in naming of file, first section before _ is the variable name
-        variable_id = nc_file.stem.split('_')[0]
-        indices = gen_seafloor_indices(ds, var=variable_id)  # Assuming this function is already defined
-        seafloor_indices[nc_file.parent] = indices  # Store by filename stem
-        # Close the dataset to free resources
-        ds.close()
-        break  # Since all files are the same, we can break after the first
+        try:
+            ds = load_dataset_with_dask(nc_file)
+            # in naming of file, first section before _ is the variable name
+            variable_id = nc_file.stem.split('_')[0]
+            indices = gen_seafloor_indices(ds, var=variable_id)  # Assuming this function is already defined
+            seafloor_indices[nc_file.parent] = indices  # Store by filename stem
+            # Close the dataset to free resources
+            ds.close()
+            break  # Since all files are the same, we can break after the first
+        except Exception as e:
+            print(f"Error processing {nc_file}: {e}")
+            continue
 
     return seafloor_indices
 
 
-def extract_seafloor_vals_from_ds(ds: xa.Dataset, variable_id: str) -> xa.Dataset:
+def extract_seafloor_vals_from_ds(ds: xa.Dataset, variable_id: str, seafloor_indices: np.ndarray=None) -> xa.Dataset:
     """Extract seafloor values from a dataset for a given variable.
     
     Args:
@@ -114,10 +118,15 @@ def extract_seafloor_vals_from_ds(ds: xa.Dataset, variable_id: str) -> xa.Datase
     Returns:
         ds (xa.Dataset): dataset with seafloor values extracted
     """
-    seafloor_indices = gen_seafloor_indices(ds, var=variable_id)
+    seafloor_indices = seafloor_indices if seafloor_indices.all() else gen_seafloor_indices(ds, var=variable_id)
     cmip6_array = extract_3d_index_vals(ds[variable_id], seafloor_indices)
     # Overwrite the original variable with the extracted values
     ds[variable_id] = (["time", "i", "j"], cmip6_array)
+    # remove lev dimension
+    ds = ds.drop_indexes('lev').reset_coords('lev', drop=True)
+    # remove lev_bnds variable
+    if 'lev_bnds' in ds.variables:
+        ds = ds.drop_vars('lev_bnds')
     return ds
 
 
@@ -139,7 +148,7 @@ def extract_3d_index_vals(xa_da: xa.DataArray, indices_array: np.ndarray) -> np.
     return vals_array[t_grid, indices_array, j_grid, i_grid]
 
 
-def process_raw_data_directory(raw_data_dir_fp: Path):
+def process_raw_data_directory(raw_data_dir_fp: Path, chunk_schema: dict={"time": 1}, delete_og: bool=False):
     """Process all .nc files in a directory by extracting seafloor values.
     
     Args:
@@ -148,19 +157,23 @@ def process_raw_data_directory(raw_data_dir_fp: Path):
     Returns:
         None
     """
-    seafloor_indices = find_seafloor_indices_for_directory(raw_data_dir_fp)
-
-    # Process each file using the precomputed indices
-    for nc_file in tqdm(Path(raw_data_dir_fp).glob('**/*.nc'), desc="Extracting seafloor values...", total=len(list(Path(raw_data_dir_fp).glob('**/*.nc')))):
-        variable_id = nc_file.stem.split('_')[0]
-        ds = load_dataset_with_dask(nc_file)
-        
-        if variable_id in ds.variables:
-            ds = extract_seafloor_vals_from_ds(ds, variable_id, seafloor_indices[raw_data_dir_fp])
-            # Save or process the dataset as needed
-            # ds.to_netcdf(f"processed/{nc_file.name}")
-        
-        ds.close()
+    # check if any nc files in directory with 'lev' dimension
+    if any(check_lev_exists(file_path) for file_path in Path(raw_data_dir_fp).glob('*.nc')):
+        seafloor_indices = find_seafloor_indices_for_directory(raw_data_dir_fp)
+        test_dir = raw_data_dir_fp / "extracted_lev"
+        Path.mkdir(test_dir, exist_ok=True)
+        # Process each file using the precomputed indices
+        for nc_file in tqdm(Path(raw_data_dir_fp).glob('**/*.nc'), desc="Extracting seafloor values...", total=len(list(Path(raw_data_dir_fp).glob('**/*.nc')))):
+            print(f'\tProcessing {nc_file.stem}...', flush=True)
+            variable_id = nc_file.stem.split('_')[0]
+            ds = load_dataset_with_dask(nc_file, chunk_schema=chunk_schema)
+            
+            if variable_id in ds.variables:
+                ds = extract_seafloor_vals_from_ds(ds, variable_id, seafloor_indices[raw_data_dir_fp])
+                ds.to_netcdf(test_dir / f"{nc_file.stem}.nc")
+            ds.close()
+            if delete_og:
+                nc_file.unlink()
 
 
 def gen_seafloor_indices(xa_d: xa.Dataset, var: str, dim: str = "lev"):
