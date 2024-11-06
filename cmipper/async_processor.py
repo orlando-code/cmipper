@@ -1,69 +1,161 @@
-# general
-import asyncio
+from concurrent.futures import ProcessPoolExecutor
+from pathlib import Path
+from tqdm import tqdm
+import xarray as xa
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-from pathlib import Path
-import yaml
+from cmipper import utils, config, processing, file_ops
+import time
 
-# custom
-from cmipper import processing
+RAW_DATA_DIR = config.ESGPULL_DATA_DIR
+NUM_CORES = 16  # Specify the number of cores to use
+data_processing_config = file_ops.read_yaml(config.TMP_DIR / "data_processing.yaml")
 
-# Load configuration for data processing
-with open('/maps/rt582/cmipper/tmp/data_processing.yaml', 'r') as file:
-    data_processing_config = yaml.safe_load(file)
+DO_DELETE_ORIGINAL = data_processing_config["do_delete_original"]
+SELECT_LEVEL = data_processing_config["select_level"]
+DO_REGRID = data_processing_config["do_regrid"]
+REMAP_METHOD = data_processing_config["remap_method"]
+OUTPUT_GRID = data_processing_config["output_grid"]
+# regrid dir
+regridded_data_dir_fp = config.TEST_DATA_DIR
 
-select_level = data_processing_config["select_level"]
-do_regrid = data_processing_config["do_regrid"]
-output_grid = data_processing_config["output_grid"]
-remap_method = data_processing_config["remap_method"]
 
-# Set up directories
-raw_data_dir = Path('/maps/rt582/cmipper/.esgpull/data/')
-processed_data_dir = Path('/maps/rt582/cmipper/data/test/')
+def process_raw_data_directory(raw_data_dir_fp: Path, chunk_schema: dict = {"time": 1}):
+    """Process all .nc files in a directory by extracting seafloor values.
 
-# Function to handle file processing steps asynchronously
-async def process_file(file_path):
-    # Step 1: extract level and overwrite downloaded
-    if select_level is not None:
-        print(f"\n\t\tProcessing {file_path} for pressure level selection...")
-        level_subset = processing.extract_dataset_level(file_path=file_path, select_level=select_level)
-        
-        # Handle permission issue by saving to a temporary file first, then moving it
-        temp_path = file_path.with_suffix('.tmp')
-        level_subset.to_netcdf(temp_path)
-        temp_path.rename(file_path)  # Rename the temporary file to the original path
+    This function handles the setup and checks that should only run once per directory.
 
-    # Step 2: regrid and save in processed_data_dir
-    rel_path = file_path.relative_to(raw_data_dir)
-    output_path = processed_data_dir / rel_path
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    if do_regrid:
-        print(f"\n\t\tRegridding and saving to {output_path}...")
-        regrid = processing.reproject_xa_d(xa_d=level_subset, ds_fp=file_path, output_grid=output_grid, remap_method=remap_method)
-        regrid.to_netcdf(output_path)
+    Args:
+        raw_data_dir_fp (Path): path to the directory containing .nc files
 
-# Event handler to trigger file processing on file creation
-class DownloadHandler(FileSystemEventHandler):
+    Returns:
+        None
+    """
+    nc_fps = list(Path(raw_data_dir_fp).glob("*.nc"))
+
+    # level extraction
+    if bool(SELECT_LEVEL):
+        # ccheck if any .nc files in directory with 'lev' dimension
+        if any(processing.check_lev_exists(file_path) for file_path in nc_fps):
+            test_dir = raw_data_dir_fp / "extracted_lev"
+            Path.mkdir(test_dir, exist_ok=True)
+
+            # Check if files don't already exist in test_dir
+            existing_files = set(test_dir.glob("*.nc"))
+            if set(nc_fps).issubset(existing_files):
+                print(f"All files in {raw_data_dir_fp} already processed.")
+                return
+
+            # Process each file
+            unprocessed_files = set(nc_fps) - existing_files
+            print(
+                f"Found {len(unprocessed_files)} unprocessed files in {raw_data_dir_fp}."
+            )
+
+            # Use a lock to manage concurrent file processing
+            for nc_file in tqdm(
+                unprocessed_files,
+                desc="Extracting level value(s)...",
+                total=len(unprocessed_files),
+            ):
+                print(f"\tExtracting level value(s) from {nc_file.stem}...", flush=True)
+                variable_id = nc_file.stem.split("_")[0]
+                ds = processing.load_dataset_with_dask(
+                    nc_file, chunk_schema=chunk_schema
+                )
+
+                if variable_id in ds.variables:
+                    seafloor_indices = processing.find_seafloor_indices_for_directory(
+                        raw_data_dir_fp
+                    )
+                    ds = processing.extract_seafloor_vals_from_ds(
+                        ds, variable_id, seafloor_indices[raw_data_dir_fp]
+                    )
+                    ds.close()
+                    ds.to_netcdf(test_dir / f"{nc_file.stem}.nc")
+
+                if DO_DELETE_ORIGINAL:
+                    nc_file.unlink()
+
+    # regridding
+    if DO_REGRID:
+        # select directories either "extracted_lev" which are subdirectories of raw_data_dir_fp,
+        # or which are "tos", "rsds"
+
+        if any(
+            keyword in str(raw_data_dir_fp)
+            for keyword in ["extracted_lev", "tos", "rsds"]
+        ):
+
+            nc_files = list(raw_data_dir_fp.glob("*.nc"))
+            remap_template_fp = processing.handle_cdo_template(
+                xa.open_dataset(nc_files[0]),
+                raw_data_dir_fp,
+                OUTPUT_GRID,
+            )
+            # make new directory for regridded data
+            regridded_dir = (
+                regridded_data_dir_fp
+                / raw_data_dir_fp.resolve().relative_to(config.ESGPULL_DATA_DIR)
+            )
+            Path.mkdir(regridded_dir, exist_ok=True)
+
+            for nc_file in tqdm(nc_files, desc=f"Regridding {raw_data_dir_fp}..."):
+                # get new fp
+                regridded_fp = regridded_dir / nc_file.name
+                # if file already exists, skip
+                if regridded_fp.exists():
+                    print(f"{regridded_fp} already exists.")
+                    continue
+
+                # Perform regridding operation here
+                print(f"\tRegridding {nc_file.stem}...", flush=True)
+                ds = processing.load_dataset_with_dask(
+                    nc_file, chunk_schema=chunk_schema
+                )
+                regridded_ds = utils.process_xa_d(
+                    utils.cdo_remap(
+                        ds,
+                        remap_template_fp=remap_template_fp,
+                        remap_method=REMAP_METHOD,
+                    )
+                )
+                regridded_ds.to_netcdf(regridded_fp)
+                ds.close()
+                regridded_ds.close()
+
+            if DO_DELETE_ORIGINAL:
+                nc_file.unlink()
+
+
+class NewFileHandler(FileSystemEventHandler):
+    def __init__(self, executor):
+        self.executor = executor
+
     def on_created(self, event):
-        if not event.is_directory and event.src_path.endswith('.nc'):
-            asyncio.run(process_file(Path(event.src_path)))
+        if event.is_directory:
+            return
+        if event.src_path.endswith(".nc"):
+            subdir = Path(event.src_path).parent
+            self.executor.submit(process_raw_data_directory, subdir)
 
 
-# Function to start the observer
-def start_observer():
-    event_handler = DownloadHandler()
-    observer = Observer()
-    observer.schedule(event_handler, path=raw_data_dir, recursive=True)
-    observer.start()
-    print("Observer started, monitoring for new files...")
+def main():
+    print("Waiting for new files...")
+    # Use ProcessPoolExecutor to parallelize the processing of subdirectories
+    with ProcessPoolExecutor(max_workers=NUM_CORES) as executor:
+        event_handler = NewFileHandler(executor)
+        observer = Observer()
+        observer.schedule(event_handler, str(RAW_DATA_DIR), recursive=True)
+        observer.start()
 
-    try:
-        while True:
-            asyncio.sleep(1)  # Keep the observer running
-    except KeyboardInterrupt:
-        observer.stop()
-    observer.join()
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            observer.stop()
+        observer.join()
+
 
 if __name__ == "__main__":
-    start_observer()
+    main()
