@@ -251,21 +251,6 @@ def generate_remap_info(eg_nc, resolutions: tuple[float] = None):
     return xsize, ysize, xfirst, yfirst, xinc, yinc
 
 
-def cdo_remap_fly(
-    input_object: str | xa.Dataset,
-    resolutions: tuple[float] = None,
-    variable: str = None,
-    remap_method: str = "bilinear",
-):
-    remap_template_fp = Path.cwd() / "temp_remap_template.txt"
-    remap_template_fp = return_remap_template(
-        input_object, remap_template_fp, resolutions=resolutions
-    )
-    remapped = cdo_remap(input_object, remap_template_fp, remap_method)
-    remap_template_fp.unlink()  # remove temporary remap template file
-    return remapped
-
-
 def cdo_remap(
     input_object: str | xa.Dataset,
     remap_template_fp: str = None,
@@ -547,3 +532,18 @@ def does_nc_have_duplicate_coords(nc_fp):
 # def save_yaml(yaml_path: str | Path, info: dict):
 #     with open(yaml_path, "w") as file:
 #         yaml.dump(info, file)
+
+
+# def cdo_remap_fly(
+#     input_object: str | xa.Dataset,
+#     resolutions: tuple[float] = None,
+#     variable: str = None,
+#     remap_method: str = "bilinear",
+# ):
+#     remap_template_fp = Path.cwd() / "temp_remap_template.txt"
+#     remap_template_fp = return_remap_template(
+#         input_object, remap_template_fp, resolutions=resolutions
+#     )
+#     remapped = cdo_remap(input_object, remap_template_fp, remap_method)
+#     remap_template_fp.unlink()  # remove temporary remap template file
+#     return remapped
