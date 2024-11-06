@@ -15,16 +15,18 @@ from cmipper import utils
 def check_lev_exists(file_path):
     """Check if the file has a 'lev' dimension or variable without loading it all into memory."""
     try:
-        with Dataset(str(file_path), 'r') as nc_file:
-            return 'lev' in nc_file.dimensions or 'lev' in nc_file.variables
+        with Dataset(str(file_path), "r") as nc_file:
+            return "lev" in nc_file.dimensions or "lev" in nc_file.variables
     except Exception as e:
         print(f"Error checking {file_path}: {e}")
         return False
-    
 
-def extract_dataset_level(file_path: str | Path, select_level: int | list | tuple) -> xa.Dataset:
+
+def extract_dataset_level(
+    file_path: str | Path, select_level: int | list | tuple
+) -> xa.Dataset:
     """Extract a dataset at a given pressure level index using xarray.
-    
+
     Args:
         file_path (str | Path): path to the netCDF file
         select_level (int | list | tuple): specify pressure level(s) to extract.
@@ -32,39 +34,53 @@ def extract_dataset_level(file_path: str | Path, select_level: int | list | tupl
             * int: pressure level index
             * float: closest pressure level
             * list/tuple: range of pressure levels
-    
+
     Returns:
         xa.Dataset: dataset containing variables at the specified pressure level
-        
+
     Exceptions:
-        IndexError: if the level index is out of bounds, return surface values instead        
-    """ 
+        IndexError: if the level index is out of bounds, return surface values instead
+    """
     try:
         ds = xa.open_dataset(file_path)
         data_at_level = {}
 
-        if 'lev' in ds.dims:    # if the dataset has a 'lev' dimension, continue to extract
+        if (
+            "lev" in ds.dims
+        ):  # if the dataset has a 'lev' dimension, continue to extract
             for var_name, var_data in ds.data_vars.items():
                 if var_name == "lev_bnds":
                     continue
 
-                if 'lev' in var_data.dims:
+                if "lev" in var_data.dims:
                     if select_level == -1:  # select seafloor values
                         ds = extract_seafloor_vals_from_ds(ds, var_name)
                         data_at_level[var_name] = ds[var_name]
-                    else:   # anything but seafloor values
+                    else:  # anything but seafloor values
                         try:
-                            if isinstance(select_level, (tuple, list)): # if select_level is a range
-                                data_at_level[var_name] = var_data.isel(lev=slice(min(select_level), max(select_level)))
-                            else:   # if select_level is a float, return closest value; if an int, return that level index
-                                data_at_level[var_name] = var_data.sel(lev=select_level, method="nearest") if isinstance(select_level, float) else var_data.isel(lev=select_level)
+                            if isinstance(
+                                select_level, (tuple, list)
+                            ):  # if select_level is a range
+                                data_at_level[var_name] = var_data.isel(
+                                    lev=slice(min(select_level), max(select_level))
+                                )
+                            else:  # if select_level is float, return closest value; if int, return that level index
+                                data_at_level[var_name] = (
+                                    var_data.sel(lev=select_level, method="nearest")
+                                    if isinstance(select_level, float)
+                                    else var_data.isel(lev=select_level)
+                                )
                         except IndexError:
-                            print(f"{select_level} is out of bounds. Returning surface values instead...")
+                            print(
+                                f"{select_level} is out of bounds. Returning surface values instead..."
+                            )
                             data_at_level[var_name] = var_data.isel(lev=0)
                 else:
                     data_at_level[var_name] = var_data
-        else:   # if no 'lev' dimension, return all data
-            data_at_level = {var_name: var_data for var_name, var_data in ds.data_vars.items()}
+        else:  # if no 'lev' dimension, return all data
+            data_at_level = {
+                var_name: var_data for var_name, var_data in ds.data_vars.items()
+            }
 
         return xa.Dataset(data_at_level)
 
@@ -73,17 +89,19 @@ def extract_dataset_level(file_path: str | Path, select_level: int | list | tupl
         return None
 
 
-def load_dataset_with_dask(file_path: str | Path, chunk_schema: dict | str={"time": 1}) -> xa.Dataset:
+def load_dataset_with_dask(
+    file_path: str | Path, chunk_schema: dict | str = {"time": 1}
+) -> xa.Dataset:
     """Load a dataset using xarray with dask for parallel processing. Leave spatial chunking as automatic"""
     return xa.open_dataset(file_path, chunks=chunk_schema)
 
 
 def find_seafloor_indices_for_directory(raw_data_dir_fp: Path):
     """Find the indices of seafloor values for all .nc files in a directory.
-    
+
     Args:
         raw_data_dir_fp (Path): path to the directory containing .nc files
-        
+
     Returns:
         seafloor_indices (dict): dictionary of seafloor indices for directory .nc files
     """
@@ -91,12 +109,14 @@ def find_seafloor_indices_for_directory(raw_data_dir_fp: Path):
     directory = pathlib.Path(raw_data_dir_fp)
 
     # Iterate through all .nc files in the directory
-    for nc_file in directory.glob('**/*.nc'):
+    for nc_file in directory.glob("**/*.nc"):
         try:
             ds = load_dataset_with_dask(nc_file)
             # in naming of file, first section before _ is the variable name
-            variable_id = nc_file.stem.split('_')[0]
-            indices = gen_seafloor_indices(ds, var=variable_id)  # Assuming this function is already defined
+            variable_id = nc_file.stem.split("_")[0]
+            indices = gen_seafloor_indices(
+                ds, var=variable_id
+            )  # Assuming this function is already defined
             seafloor_indices[nc_file.parent] = indices  # Store by filename stem
             # Close the dataset to free resources
             ds.close()
@@ -108,39 +128,47 @@ def find_seafloor_indices_for_directory(raw_data_dir_fp: Path):
     return seafloor_indices
 
 
-def extract_seafloor_vals_from_ds(ds: xa.Dataset, variable_id: str, seafloor_indices: np.ndarray=None) -> xa.Dataset:
+def extract_seafloor_vals_from_ds(
+    ds: xa.Dataset, variable_id: str, seafloor_indices: np.ndarray = None
+) -> xa.Dataset:
     """Extract seafloor values from a dataset for a given variable.
-    
+
     Args:
         ds (xa.Dataset): xarray dataset containing variable of interest
         variable_id (str): name of variable of interest
-    
+
     Returns:
         ds (xa.Dataset): dataset with seafloor values extracted
     """
-    seafloor_indices = seafloor_indices if seafloor_indices.all() else gen_seafloor_indices(ds, var=variable_id)
+    seafloor_indices = (
+        seafloor_indices
+        if seafloor_indices.all()
+        else gen_seafloor_indices(ds, var=variable_id)
+    )
     cmip6_array = extract_3d_index_vals(ds[variable_id], seafloor_indices)
     # Overwrite the original variable with the extracted values
     ds[variable_id] = (["time", "i", "j"], cmip6_array)
     # remove lev dimension
-    ds = ds.drop_indexes('lev').reset_coords('lev', drop=True)
+    ds = ds.drop_indexes("lev").reset_coords("lev", drop=True)
     # remove lev_bnds variable
-    if 'lev_bnds' in ds.variables:
-        ds = ds.drop_vars('lev_bnds')
+    if "lev_bnds" in ds.variables:
+        ds = ds.drop_vars("lev_bnds")
     return ds
 
 
 def extract_3d_index_vals(xa_da: xa.DataArray, indices_array: np.ndarray) -> np.ndarray:
     """Extract values from an xarray data array using 3D indices.
-    
+
     Args:
         xa_da (xa.DataArray): xarray data array containing values to extract
         indices_array (np.ndarray): array of indices to extract
-        
+
     Returns:
         np.ndarray: array of extracted values
     """
-    vals_array = xa_da.values   # this is what takes a long time since involves loading whole file at a limited rate
+    vals_array = (
+        xa_da.values
+    )  # this is what takes a long time since involves loading whole file at a limited rate
     t, j, i = indices_array.shape
     # create open grid for indices along each dimension
     t_grid, j_grid, i_grid = np.ogrid[:t, :j, :i]
@@ -148,30 +176,52 @@ def extract_3d_index_vals(xa_da: xa.DataArray, indices_array: np.ndarray) -> np.
     return vals_array[t_grid, indices_array, j_grid, i_grid]
 
 
-def process_raw_data_directory(raw_data_dir_fp: Path, chunk_schema: dict={"time": 1}, delete_og: bool=False):
+def process_raw_data_directory(
+    raw_data_dir_fp: Path, chunk_schema: dict = {"time": 1}, delete_og: bool = False
+):
     """Process all .nc files in a directory by extracting seafloor values.
-    
+
     Args:
         raw_data_dir_fp (Path): path to the directory containing .nc files
-    
+
     Returns:
         None
     """
     # check if any nc files in directory with 'lev' dimension
-    if any(check_lev_exists(file_path) for file_path in Path(raw_data_dir_fp).glob('*.nc')):
-        seafloor_indices = find_seafloor_indices_for_directory(raw_data_dir_fp)
+    nc_fps = list(Path(raw_data_dir_fp).glob("*.nc"))
+    if any(check_lev_exists(file_path) for file_path in nc_fps):
         test_dir = raw_data_dir_fp / "extracted_lev"
         Path.mkdir(test_dir, exist_ok=True)
+
+        # check if files don't already exist in test_dir
+        if set(nc_fps).issubset(set(test_dir.glob("*.nc"))):
+            print("All files already processed.")
+            return
+
+        unprocessed_files = set(nc_fps) - set(test_dir.glob("*.nc"))
+        print(f"Found {len(unprocessed_files)} unprocessed files.")
+        seafloor_indices = find_seafloor_indices_for_directory(raw_data_dir_fp)
         # Process each file using the precomputed indices
-        for nc_file in tqdm(Path(raw_data_dir_fp).glob('**/*.nc'), desc="Extracting seafloor values...", total=len(list(Path(raw_data_dir_fp).glob('**/*.nc')))):
-            print(f'\tProcessing {nc_file.stem}...', flush=True)
-            variable_id = nc_file.stem.split('_')[0]
+        for nc_file in tqdm(
+            nc_fps,
+            # Path(raw_data_dir_fp).glob("**/*.nc"),
+            desc="Extracting seafloor values...",
+            total=len(nc_fps),
+        ):
+            # if file not already in test_dir
+            if test_dir / f"{nc_file.stem}.nc" in test_dir.glob("*.nc"):
+                continue
+            print(f"\tProcessing {nc_file.stem}...", flush=True)
+            variable_id = nc_file.stem.split("_")[0]
             ds = load_dataset_with_dask(nc_file, chunk_schema=chunk_schema)
-            
+
             if variable_id in ds.variables:
-                ds = extract_seafloor_vals_from_ds(ds, variable_id, seafloor_indices[raw_data_dir_fp])
+                ds = extract_seafloor_vals_from_ds(
+                    ds, variable_id, seafloor_indices[raw_data_dir_fp]
+                )
+                ds.close()
                 ds.to_netcdf(test_dir / f"{nc_file.stem}.nc")
-            ds.close()
+
             if delete_og:
                 nc_file.unlink()
 
@@ -190,30 +240,35 @@ def gen_seafloor_indices(xa_d: xa.Dataset, var: str, dim: str = "lev"):
     print("\ndetermining seafloor indices... ", flush=True)
     # if 'time' in xa_d.dims (seafloor indices are constant in time):
     time_slice = xa_d.isel(time=0)
-    
+
     valid_mask = ~np.isnan(time_slice[var])
     seafloor_indices = xa.where(valid_mask, time_slice[dim], -1)  # Replace NaNs with -1
     indices_array = seafloor_indices.argmax(dim=dim)
     # Set indices to -1 where no valid levels were found
     indices_array = indices_array.where(valid_mask.any(dim=dim), -1)
-    
+
     # broadcast to all time slices
     indices_array = indices_array.expand_dims({"time": xa_d.time})
 
     return indices_array.values  # Convert to NumPy array
 
 
-def reproject_xa_d(xa_d: xa.Dataset | xa.DataArray, ds_fp: str | Path, output_grid: str, remap_method: str="linear") -> xa.Dataset:
+def handle_cdo_template(
+    eg_xa_d: xa.Dataset | xa.DataArray,
+    dir_fp: Path,
+    output_grid: str,
+):
     # check if remap template exists in directory
-    # get directory
-    dir_fp = Path(ds_fp).parent
     # look for text file with "template" in name
     remap_template_fps = list(dir_fp.glob("*_remap_template*"))
-    if len(remap_template_fps) > 0:    # if remap template exists
+    if len(remap_template_fps) > 0:  # if remap template exists
         print("Using existing remapping template at ", remap_template_fps[0])
         remap_template_fp = remap_template_fps[0]
-    else:   # else generate
+    else:  # else generate
         remap_template_fp = dir_fp / f"{output_grid}_remap_template.txt"
-        remap_template_fp = utils.return_remap_template(input_file=xa_d, remap_template_fp=remap_template_fp, out_grid=output_grid)
-
-    return utils.process_xa_d(utils.cdo_remap(xa_d, remap_template_fp=remap_template_fp, remap_method=remap_method))
+        remap_template_fp = utils.return_remap_template(
+            input_file=eg_xa_d,
+            remap_template_fp=remap_template_fp,
+            out_grid=output_grid,
+        )
+    return remap_template_fp
