@@ -257,6 +257,12 @@ def cdo_remap(
     remap_method: str = "bilinear",
 ):
     cdo = Cdo()
+    # ensure attributes correct
+    input_object["latitude"].attrs["standard_name"] = "latitude"
+    input_object["longitude"].attrs["standard_name"] = "longitude"
+    input_object["latitude"].attrs["units"] = "degrees_north"
+    input_object["longitude"].attrs["units"] = "degrees_east"
+
     if remap_method == "bilinear":
         return cdo.remapbil(remap_template_fp, input=input_object, returnXDataset=True)
     elif remap_method == "bicubic":
