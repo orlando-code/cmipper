@@ -6,6 +6,7 @@ import re
 # spatial
 import xarray as xa
 from cdo import Cdo
+
 # TODO: add expected finish time based on length of results and time of execution per result
 
 
@@ -18,8 +19,22 @@ def lat_lon_string_from_tuples(
     lats = [round_to_1_sf_after_decimal(min_lat), round_to_1_sf_after_decimal(max_lat)]
     lons = [round_to_1_sf_after_decimal(min_lon), round_to_1_sf_after_decimal(max_lon)]
 
-    lats_strs = [f"s{replace_dot_with_dash(str(abs(lat)))}" if lat < 0 else f"n{replace_dot_with_dash(str(abs(lat)))}" for lat in lats]   # noqa
-    lons_strs = [f"w{replace_dot_with_dash(str(abs(lon)))}" if lon < 0 else f"e{replace_dot_with_dash(str(abs(lon)))}" for lon in lons]   # noqa
+    lats_strs = [
+        (
+            f"s{replace_dot_with_dash(str(abs(lat)))}"
+            if lat < 0
+            else f"n{replace_dot_with_dash(str(abs(lat)))}"
+        )
+        for lat in lats
+    ]  # noqa
+    lons_strs = [
+        (
+            f"w{replace_dot_with_dash(str(abs(lon)))}"
+            if lon < 0
+            else f"e{replace_dot_with_dash(str(abs(lon)))}"
+        )
+        for lon in lons
+    ]  # noqa
 
     return "_".join(lats_strs + lons_strs)
 
@@ -42,7 +57,7 @@ def round_to_1_sf_after_decimal(num):
         >>> round_to_1_sf_after_decimal(0.005)
         0.0
     """
-    parts = str(num).split('.')
+    parts = str(num).split(".")
     # if there is a decimal part
     if len(parts) == 2:
         dec_part = parts[1]
@@ -50,11 +65,11 @@ def round_to_1_sf_after_decimal(num):
         # determine number of zeros before first non-zero digit
         num_zeros = 0
         for i in range(len(dec_part)):
-            if dec_part[i] == '0':
+            if dec_part[i] == "0":
                 num_zeros += 1
             else:
                 break
-        return float(parts[0] + '.' + num_zeros*'0' + f"{float(f"{float(dec_part):.1g}"):g}"[0])    # noqa
+        return float(f"{parts[0]}.{num_zeros*'0'}{dec_part[0]}")  # noqa
     else:
         return float(parts[0])
 
@@ -83,7 +98,9 @@ def gen_seafloor_indices(xa_d: xa.Dataset, var: str, dim: str = "lev"):
 
 
 def extract_3d_index_vals(xa_da, indices_array):
-    vals_array = xa_da.values   # this is what takes a long time since involves loading whole file at a limited rate
+    vals_array = (
+        xa_da.values
+    )  # this is what takes a long time since involves loading whole file at a limited rate
     t, j, i = indices_array.shape
     # create open grid for indices along each dimension
     t_grid, j_grid, i_grid = np.ogrid[:t, :j, :i]
@@ -104,14 +121,14 @@ def extract_seafloor_vals_from_ds(ds, variable_id):
         ),  # these variable names may differ by model
     )
     print("\n\textracting seafloor values...", flush=True)
-    cmip6_array = extract_3d_index_vals(
-        ds[variable_id], seafloor_indices
-    )
+    cmip6_array = extract_3d_index_vals(ds[variable_id], seafloor_indices)
     ds[variable_id] = (["time", "j", "i"], cmip6_array)
     return ds, seafloor_indices
 
 
-def extract_seafloor_vals(ds: xa.Dataset, variable_id: str = None, seafloor_indices: np.ndarray = None):
+def extract_seafloor_vals(
+    ds: xa.Dataset, variable_id: str = None, seafloor_indices: np.ndarray = None
+):
     # if seafloor indices not yet calculated, calculate
     if seafloor_indices is None:
         seafloor_indices = gen_seafloor_indices(
@@ -127,16 +144,19 @@ def extract_seafloor_vals(ds: xa.Dataset, variable_id: str = None, seafloor_indi
             ),  # these variable names may differ by model
         )
     print("\n\textracting seafloor values...", flush=True)
-    cmip6_array = extract_3d_index_vals(
-        ds[variable_id], seafloor_indices
-    )
+    cmip6_array = extract_3d_index_vals(ds[variable_id], seafloor_indices)
     ds[variable_id] = (["time", "j", "i"], cmip6_array)
     return ds, seafloor_indices
 
 
-def return_remap_template(input_file: str | xa.Dataset, remap_template_fp: str | Path, resolutions: tuple[float]=None, out_grid: str="latlon"):
+def return_remap_template(
+    input_file: str | xa.Dataset,
+    remap_template_fp: str | Path,
+    resolutions: tuple[float] = None,
+    out_grid: str = "latlon",
+):
     # if not Path(remap_template_fp).exists():   # if remap template not provided, generate it
-        # if file provided as fp rather than ds, open dataset to determine data
+    # if file provided as fp rather than ds, open dataset to determine data
     if isinstance(input_file, str):
         input_file = xa.open_dataset(Path(input_file))
 
@@ -174,21 +194,22 @@ def generate_remapping_file(
         )
 
 
-def generate_remap_info(eg_nc, resolutions: tuple[float]=None):
+def generate_remap_info(eg_nc, resolutions: tuple[float] = None):
     # standardise names to extract values
     rename_mapping = {
         "lat": "latitude",
         "lon": "longitude",
         "y": "latitude",
-        "x": "longitude"}
+        "x": "longitude",
+    }
     for coord, new_coord in rename_mapping.items():
         if new_coord not in eg_nc.coords and coord in eg_nc.coords:
-            eg_nc = eg_nc.rename({coord: new_coord})    
+            eg_nc = eg_nc.rename({coord: new_coord})
 
     # [-180, 180] longitudinal range
     max_lon = np.max(eg_nc.longitude.values)
     min_lon = np.min(eg_nc.longitude.values)
-    if max_lon > 180:   # no better way to check this without providing explicit argument
+    if max_lon > 180:  # no better way to check this without providing explicit argument
         min_lon -= 180
     else:
         min_lon = np.min(eg_nc.longitude.values)
@@ -203,7 +224,7 @@ def generate_remap_info(eg_nc, resolutions: tuple[float]=None):
     lat_range = np.max(eg_nc.latitude.values) - np.min(eg_nc.latitude.values)
     lon_range = np.max(eg_nc.longitude.values) - np.min(eg_nc.longitude.values)
 
-    if not resolutions: # keep at original resolution
+    if not resolutions:  # keep at original resolution
         coord_shape = eg_nc.latitude.shape
         if len(coord_shape) == 2:
             num_xcells = coord_shape[1]
@@ -211,7 +232,7 @@ def generate_remap_info(eg_nc, resolutions: tuple[float]=None):
         else:
             num_xcells = len(eg_nc.latitude.values)
             num_ycells = len(eg_nc.longitude.values)
-            
+
         lat_res = lat_range / num_ycells
         lon_res = lon_range / num_xcells
     else:
@@ -230,16 +251,26 @@ def generate_remap_info(eg_nc, resolutions: tuple[float]=None):
     return xsize, ysize, xfirst, yfirst, xinc, yinc
 
 
-
-def cdo_remap_fly(input_object: str | xa.Dataset, resolutions: tuple[float]=None, variable: str=None, remap_method: str="bilinear"):    
+def cdo_remap_fly(
+    input_object: str | xa.Dataset,
+    resolutions: tuple[float] = None,
+    variable: str = None,
+    remap_method: str = "bilinear",
+):
     remap_template_fp = Path.cwd() / "temp_remap_template.txt"
-    remap_template_fp = return_remap_template(input_object, remap_template_fp, resolutions=resolutions)
+    remap_template_fp = return_remap_template(
+        input_object, remap_template_fp, resolutions=resolutions
+    )
     remapped = cdo_remap(input_object, remap_template_fp, remap_method)
     remap_template_fp.unlink()  # remove temporary remap template file
     return remapped
 
 
-def cdo_remap(input_object: str | xa.Dataset, remap_template_fp: str=None, remap_method: str="bilinear"):
+def cdo_remap(
+    input_object: str | xa.Dataset,
+    remap_template_fp: str = None,
+    remap_method: str = "bilinear",
+):
     cdo = Cdo()
     if remap_method == "bilinear":
         return cdo.remapbil(remap_template_fp, input=input_object, returnXDataset=True)
@@ -252,7 +283,9 @@ def cdo_remap(input_object: str | xa.Dataset, remap_template_fp: str=None, remap
     elif remap_method == "conservative":
         return cdo.remapcon(remap_template_fp, input=input_object, returnXDataset=True)
     elif remap_method == "distance":
-        return cdo.remapdis(remap_template_fp, neighbours=8, input=input_object, returnXDataset=True)
+        return cdo.remapdis(
+            remap_template_fp, neighbours=8, input=input_object, returnXDataset=True
+        )
     elif remap_method == "mean":
         return cdo.remapmean(remap_template_fp, input=input_object, returnXDataset=True)
     elif remap_method == "sum":
@@ -262,8 +295,14 @@ def cdo_remap(input_object: str | xa.Dataset, remap_template_fp: str=None, remap
         raise ValueError(f"Invalid/not-yet-implemented remap method: {remap_method}")
 
 
-
-def generate_chunk_bounds(degrees_lat, degrees_lon, lat_range=(-90, 90), lon_range=(-180, 180), lat_buffer=1, lon_buffer=1):
+def generate_chunk_bounds(
+    degrees_lat,
+    degrees_lon,
+    lat_range=(-90, 90),
+    lon_range=(-180, 180),
+    lat_buffer=1,
+    lon_buffer=1,
+):
     """
     Generate latitude and longitude bounds for chunks spanning a specified range.
 
@@ -287,13 +326,25 @@ def generate_chunk_bounds(degrees_lat, degrees_lon, lat_range=(-90, 90), lon_ran
     lon_step = (lon_range[1] - lon_range[0]) / N_lon
 
     # Generate latitude bounds
-    lat_bounds = [(lat_range[0] + i * lat_step, lat_range[0] + (i + 1) * lat_step) for i in range(N_lat)]
+    lat_bounds = [
+        (lat_range[0] + i * lat_step, lat_range[0] + (i + 1) * lat_step)
+        for i in range(N_lat)
+    ]
     # Generate longitude bounds
-    lon_bounds = [(lon_range[0] + i * lon_step, lon_range[0] + (i + 1) * lon_step) for i in range(N_lon)]
+    lon_bounds = [
+        (lon_range[0] + i * lon_step, lon_range[0] + (i + 1) * lon_step)
+        for i in range(N_lon)
+    ]
 
-    lat_bounds = [(min(lat_bound)-lat_buffer, max(lat_bound)+lat_buffer) for lat_bound in lat_bounds]
-    lon_bounds = [(min(lon_bound)-lat_buffer, max(lon_bound)+lat_buffer) for lon_bound in lon_bounds]
-    
+    lat_bounds = [
+        (min(lat_bound) - lat_buffer, max(lat_bound) + lat_buffer)
+        for lat_bound in lat_bounds
+    ]
+    lon_bounds = [
+        (min(lon_bound) - lat_buffer, max(lon_bound) + lat_buffer)
+        for lon_bound in lon_bounds
+    ]
+
     return lat_bounds, lon_bounds
 
 
@@ -347,7 +398,7 @@ def process_xa_d(
     # temp_xa_d = xa_d.rename(
     #     {coord: rename_mapping.get(coord, coord) for coord in xa_d.coords}
     # )
-    temp_xa_d = temp_xa_d.squeeze() # remove size 1 dimensions
+    temp_xa_d = temp_xa_d.squeeze()  # remove size 1 dimensions
 
     if "time" in temp_xa_d.dims:
         temp_xa_d = temp_xa_d.transpose("time", "latitude", "longitude", ...)
@@ -398,6 +449,7 @@ def limit_model_info_dict(model: dict, download: dict):
         )
     }
 
+
 def extract_matching_subsets(first_dict, second_dict):
     matching_subsets = {}
 
@@ -406,28 +458,33 @@ def extract_matching_subsets(first_dict, second_dict):
             matching_subsets[model] = {}
 
             # Extract matching variable_ids
-            first_var_ids = set(first_dict[model].get('variable_ids', []))
-            second_var_dict = second_dict[model].get('variable_dict', {})
-            matching_var_ids = {var: second_var_dict[var] for var in first_var_ids if var in second_var_dict}
+            first_var_ids = set(first_dict[model].get("variable_ids", []))
+            second_var_dict = second_dict[model].get("variable_dict", {})
+            matching_var_ids = {
+                var: second_var_dict[var]
+                for var in first_var_ids
+                if var in second_var_dict
+            }
             if matching_var_ids:
-                matching_subsets[model]['variable_dict'] = matching_var_ids
+                matching_subsets[model]["variable_dict"] = matching_var_ids
 
             # Extract matching member_ids
-            first_member_ids = set(first_dict[model].get('member_ids', []))
-            second_member_ids = set(second_dict[model].get('member_ids', []))
+            first_member_ids = set(first_dict[model].get("member_ids", []))
+            second_member_ids = set(second_dict[model].get("member_ids", []))
             matching_member_ids = list(first_member_ids.intersection(second_member_ids))
             if matching_member_ids:
-                matching_subsets[model]['member_ids'] = matching_member_ids
+                matching_subsets[model]["member_ids"] = matching_member_ids
 
             # Extract matching experiment_ids
-            first_experiment_ids = set(first_dict[model].get('experiment_ids', {}))
-            second_experiment_ids = set(second_dict[model].get('experiment_ids', []))
-            matching_experiment_ids = list(first_experiment_ids.intersection(second_experiment_ids))
+            first_experiment_ids = set(first_dict[model].get("experiment_ids", {}))
+            second_experiment_ids = set(second_dict[model].get("experiment_ids", []))
+            matching_experiment_ids = list(
+                first_experiment_ids.intersection(second_experiment_ids)
+            )
             if matching_experiment_ids:
-                matching_subsets[model]['experiment_ids'] = matching_experiment_ids
+                matching_subsets[model]["experiment_ids"] = matching_experiment_ids
 
     return matching_subsets
-
 
 
 def has_duplicates(arr):
@@ -440,19 +497,21 @@ def has_duplicates(arr):
 def replace_dash_with_dot(string: str):
     return string.replace("-", ".")
 
+
 def replace_dot_with_dash(string: str):
     return string.replace(".", "-")
 
+
 def replace_decimal_dash_with_dot(string):
-    return re.sub(r'(?<=\d)-(?=\d)', '.', string)
+    return re.sub(r"(?<=\d)-(?=\d)", ".", string)
 
 
 def dash_process_coordinate(num_string):
     if num_string[0] == "-":
-        if "-" in num_string[1:] and re.match(r'\d+-\d+', num_string[1:]):
+        if "-" in num_string[1:] and re.match(r"\d+-\d+", num_string[1:]):
             return -float(replace_decimal_dash_with_dot(num_string[1:]))
     # Check if the dash is sandwiched between two numbers before replacing it
-    if "-" in num_string and re.match(r'\d+-\d+', num_string):
+    if "-" in num_string and re.match(r"\d+-\d+", num_string):
         return float(replace_decimal_dash_with_dot(num_string))
     return float(num_string)
 
@@ -473,7 +532,6 @@ def does_nc_have_duplicate_coords(nc_fp):
             return False
     else:
         return True
-
 
 
 # POTENTIAL FUTURE USE
