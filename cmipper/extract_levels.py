@@ -13,7 +13,7 @@ SELECT_LEVEL = data_processing_config["select_level"]
 DO_REGRID = data_processing_config["do_regrid"]
 REMAP_METHOD = data_processing_config["remap_method"]
 OUTPUT_GRID = data_processing_config["output_grid"]
-SELECT_LEVEL = False
+SELECT_LEVEL = True
 DO_REGRID = True
 # regrid dir
 regridded_data_dir_fp = config.TEST_DATA_DIR
@@ -34,7 +34,7 @@ def process_raw_data_directory(raw_data_dir_fp: Path, chunk_schema: dict = {"tim
 
     # level extraction
     if bool(SELECT_LEVEL):
-        # ccheck if any .nc files in directory with 'lev' dimension
+        # check if any .nc files in directory with 'lev' dimension
         if any(processing.check_lev_exists(file_path) for file_path in nc_fps):
             test_dir = raw_data_dir_fp / "extracted_lev"
             Path.mkdir(test_dir, exist_ok=True)
@@ -48,7 +48,7 @@ def process_raw_data_directory(raw_data_dir_fp: Path, chunk_schema: dict = {"tim
             # Process each file
             unprocessed_files = set(nc_fps) - existing_files
             print(
-                f"Found {len(unprocessed_files)} unprocessed files in {raw_data_dir_fp}."
+                f"Found {len(unprocessed_files)} unprocessed file(s) in {raw_data_dir_fp}."
             )
 
             # Use a lock to manage concurrent file processing

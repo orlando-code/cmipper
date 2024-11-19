@@ -36,3 +36,8 @@ __pycache__/
 
 # temporary files
 /tmp
+
+.vscode
+
+# TODO: fix this
+**.egg-info/    

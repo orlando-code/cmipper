@@ -92,7 +92,7 @@ def extract_dataset_level(
 def load_dataset_with_dask(
     file_path: str | Path, chunk_schema: dict | str = {"time": 1}
 ) -> xa.Dataset:
-    """Load a dataset using xarray with dask for parallel processing. Leave spatial chunking as automatic"""
+    """Load a dataset using xarray with dask for parallel  Leave spatial chunking as automatic"""
     return xa.open_dataset(file_path, chunks=chunk_schema)
 
 
@@ -134,25 +134,34 @@ def extract_seafloor_vals_from_ds(
     """Extract seafloor values from a dataset for a given variable.
 
     Args:
-        ds (xa.Dataset): xarray dataset containing variable of interest
-        variable_id (str): name of variable of interest
+        ds (xa.Dataset): xarray dataset containing variable of interest.
+        variable_id (str): Name of the variable to extract values from.
+        seafloor_indices (np.ndarray, optional): Precomputed seafloor indices.
 
     Returns:
-        ds (xa.Dataset): dataset with seafloor values extracted
+        xa.Dataset: Updated dataset with seafloor values extracted.
     """
-    seafloor_indices = (
-        seafloor_indices
-        if seafloor_indices.all()
-        else gen_seafloor_indices(ds, var=variable_id)
-    )
+    required_dims = ["time", "i", "j"]
+
+    # Generate seafloor indices if not provided
+    if seafloor_indices is None or not seafloor_indices.all():
+        seafloor_indices = gen_seafloor_indices(ds, var=variable_id)
+
+    # Extract the 3D values using the seafloor indices
     cmip6_array = extract_3d_index_vals(ds[variable_id], seafloor_indices)
-    # Overwrite the original variable with the extracted values
-    ds[variable_id] = (["time", "i", "j"], cmip6_array)
-    # remove lev dimension
-    ds = ds.drop_indexes("lev").reset_coords("lev", drop=True)
-    # remove lev_bnds variable
+
+    # Identify existing dimensions of the variable that match required_dims
+    existing_dims = [dim for dim in ds[variable_id].dims if dim in required_dims]
+
+    # Update the dataset variable with the extracted values, preserving dimension order
+    ds[variable_id] = xa.DataArray(cmip6_array, dims=existing_dims)
+
+    # Remove unnecessary coordinates and variables related to "lev"
+    if "lev" in ds.dims:
+        ds = ds.drop_indexes("lev").reset_coords("lev", drop=True)
     if "lev_bnds" in ds.variables:
         ds = ds.drop_vars("lev_bnds")
+
     return ds
 
 
