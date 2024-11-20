@@ -13,10 +13,13 @@ from cmipper import utils
 
 
 def check_lev_exists(file_path):
-    """Check if the file has a 'lev' dimension or variable without loading it all into memory."""
+    """Check if the file has a 'lev' or 'depth' dimension or variable without loading it all into memory."""
     try:
         with Dataset(str(file_path), "r") as nc_file:
-            return "lev" in nc_file.dimensions or "lev" in nc_file.variables
+            return any(
+                dim in nc_file.dimensions or dim in nc_file.variables
+                for dim in ["lev", "depth"]
+            )
     except Exception as e:
         print(f"Error checking {file_path}: {e}")
         return False
@@ -96,7 +99,7 @@ def load_dataset_with_dask(
     return xa.open_dataset(file_path, chunks=chunk_schema)
 
 
-def find_seafloor_indices_for_directory(raw_data_dir_fp: Path):
+def find_seafloor_indices_for_directory(raw_data_dir_fp: Path, lev_dim: str = "lev"):
     """Find the indices of seafloor values for all .nc files in a directory.
 
     Args:
@@ -115,7 +118,7 @@ def find_seafloor_indices_for_directory(raw_data_dir_fp: Path):
             # in naming of file, first section before _ is the variable name
             variable_id = nc_file.stem.split("_")[0]
             indices = gen_seafloor_indices(
-                ds, var=variable_id
+                ds, var=variable_id, dim=lev_dim
             )  # Assuming this function is already defined
             seafloor_indices[nc_file.parent] = indices  # Store by filename stem
             # Close the dataset to free resources
@@ -141,7 +144,10 @@ def extract_seafloor_vals_from_ds(
     Returns:
         xa.Dataset: Updated dataset with seafloor values extracted.
     """
-    required_dims = ["time", "i", "j"]
+    if "i" in ds.dims and "j" in ds.dims:
+        required_dims = ["time", "i", "j"]  # ECMWF
+    elif "lon" in ds.dims and "lat" in ds.dims:
+        required_dims = ["time", "lon", "lat"]
 
     # Generate seafloor indices if not provided
     if seafloor_indices is None or not seafloor_indices.all():
@@ -156,10 +162,11 @@ def extract_seafloor_vals_from_ds(
     # Update the dataset variable with the extracted values, preserving dimension order
     ds[variable_id] = xa.DataArray(cmip6_array, dims=existing_dims)
 
-    # Remove unnecessary coordinates and variables related to "lev"
-    if "lev" in ds.dims:
-        ds = ds.drop_indexes("lev").reset_coords("lev", drop=True)
-    if "lev_bnds" in ds.variables:
+    # Remove unnecessary coordinates and variables related to "lev" or "depth"
+    for dim in ["lev", "depth"]:
+        if dim in ds.dims:
+            ds = ds.drop_indexes(dim).reset_coords(dim, drop=True)
+    if "lev_bnds" in ds.variables:  # AWI doesn't have depth_bnds
         ds = ds.drop_vars("lev_bnds")
 
     return ds
