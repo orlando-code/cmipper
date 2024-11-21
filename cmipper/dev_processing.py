@@ -111,7 +111,7 @@ class NetCDFProcessingPipeline:
             remap_dir_fp.mkdir(exist_ok=True)
             print(f"\tRemapping files in {subdirectory}")
 
-            with ProcessPoolExecutor() as executor:
+            with ProcessPoolExecutor() as executor:  # Adjust max_workers as needed
                 futures = [
                     executor.submit(self.process_file, nc_fp, remap_file, remap_dir_fp)
                     for nc_fp in nc_fps
@@ -128,44 +128,44 @@ class NetCDFProcessingPipeline:
         """
         Process a single .nc file.
         """
-        try:
-            output_file = remap_dir_fp / nc_fp.name
-            if output_file.exists():
-                print(f"{output_file} already exists. Skipping...")
-            else:
-                if "extracted_levs" not in nc_fp.parts:
-                    print(f"Extracting levels from {nc_fp}")
-                    ds = extract_top_n_depths(nc_fp, n=N)
+        # try:
+        output_file = remap_dir_fp / nc_fp.name
+        if output_file.exists():
+            print(f"{output_file} already exists. Skipping...")
+        else:
+            if "extracted_levs" not in nc_fp.parts:
+                print(f"Extracting levels from {nc_fp}")
+                ds = extract_top_n_depths(nc_fp, n=N)
 
-                if not output_file.exists():
-                    print(f"Remapping {nc_fp} -> {output_file}")
-                    ds = utils.cdo_remap(ds, remap_file, "conservative")
-                    # select desired level(s)
+            if not output_file.exists():
+                print(f"Remapping {nc_fp} -> {output_file}")
+                ds, cdo = utils.cdo_remap(ds, remap_file, "conservative")
+                # select desired level(s)
 
-                    if any(
-                        processing.check_lev_exists(file_path) for file_path in [nc_fp]
-                    ):
-                        print(
-                            f"\tExtracting level value(s) from {nc_fp.stem}...",
-                            flush=True,
+                if any(processing.check_lev_exists(file_path) for file_path in [nc_fp]):
+                    print(
+                        f"\tExtracting level value(s) from {nc_fp.stem}...",
+                        flush=True,
+                    )
+                    variable_id = nc_fp.stem.split("_")[0]
+
+                    if variable_id in ds.variables:
+                        seafloor_indices = processing.gen_seafloor_indices(
+                            ds, variable_id, "depth"
                         )
-                        variable_id = nc_fp.stem.split("_")[0]
+                        extracted_ds = processing.extract_seafloor_vals_from_ds(
+                            ds, variable_id, seafloor_indices
+                        )
+                        ds.close()
+                        ds = extracted_ds
+                ("Saving to", output_file)
+                ds.to_netcdf(output_file)
+                # clean up cdo tempdir
 
-                        if variable_id in ds.variables:
-                            seafloor_indices = processing.gen_seafloor_indices(
-                                ds, variable_id, "depth"
-                            )
-                            extracted_ds = processing.extract_seafloor_vals_from_ds(
-                                ds, variable_id, seafloor_indices
-                            )
-                            ds.close()
-                            ds = extracted_ds
-                    ("Saving to", output_file)
-                    ds.to_netcdf(output_file)
-                else:
-                    print(f"{output_file} already exists. Skipping...")
-        except Exception as e:
-            print(f"Error processing {nc_fp}: {e}")
+            else:
+                print(f"{output_file} already exists. Skipping...")
+        # except Exception as e:
+        #     print(f"Error processing {nc_fp}: {e}", flush=True)
 
     def run(self):
         """
@@ -178,13 +178,16 @@ class NetCDFProcessingPipeline:
             print(f"\t\tScanning directory: {subdir}")
             self.process_directory(subdir)
 
+        print("\n\n PROCESSING COMPLETE\n\n")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process NetCDF files in a directory.")
     parser.add_argument(
         "parent_dir",
         nargs="?",
-        default="/maps/rt582/cmipper/.esgpull/data/CMIP6/CMIP/AWI/AWI-CM-1-1-MR/historical/r2i1p1f1",
+        # default="/maps/rt582/cmipper/.esgpull/data/CMIP6/CMIP/AWI",
+        default="/maps/rt582/cmipper/.esgpull/data/CMIP6/CMIP/AWI/AWI-CM-1-1-MR/historical/r3i1p1f1/Omon/so",
         help="The parent directory containing subdirectories of .nc files.",
     )
     args = parser.parse_args()

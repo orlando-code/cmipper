@@ -253,37 +253,31 @@ def generate_remap_info(eg_nc, resolutions: tuple[float] = None):
 
 def cdo_remap(
     input_object: str | xa.Dataset,
-    remap_template_fp: str = None,
+    remap_template_fp: str,
     remap_method: str = "bilinear",
 ):
     cdo = Cdo()
-    # ensure attributes correct
-    # input_object["latitude"].attrs["standard_name"] = "latitude"
-    # input_object["longitude"].attrs["standard_name"] = "longitude"
-    # input_object["latitude"].attrs["units"] = "degrees_north"
-    # input_object["longitude"].attrs["units"] = "degrees_east"
+    remap_methods = {
+        "bilinear": cdo.remapbil,
+        "bicubic": cdo.remapbic,
+        "nearest": cdo.remapnn,
+        "remapdis": cdo.remapdis,
+        "conservative": cdo.remapcon,
+        "distance": lambda template, input: cdo.remapdis(
+            template, neighbours=8, input=input, returnXDataset=True
+        ),
+        "mean": cdo.remapmean,
+        "sum": cdo.remapsum,
+    }
 
-    if remap_method == "bilinear":
-        return cdo.remapbil(remap_template_fp, input=input_object, returnXDataset=True)
-    elif remap_method == "bicubic":
-        return cdo.remapbic(remap_template_fp, input=input_object, returnXDataset=True)
-    elif remap_method == "nearest":
-        return cdo.remapnn(remap_template_fp, input=input_object, returnXDataset=True)
-    elif remap_method == "remapdis":
-        return cdo.remapdis(remap_template_fp, input=input_object, returnXDataset=True)
-    elif remap_method == "conservative":
-        return cdo.remapcon(remap_template_fp, input=input_object, returnXDataset=True)
-    elif remap_method == "distance":
-        return cdo.remapdis(
-            remap_template_fp, neighbours=8, input=input_object, returnXDataset=True
-        )
-    elif remap_method == "mean":
-        return cdo.remapmean(remap_template_fp, input=input_object, returnXDataset=True)
-    elif remap_method == "sum":
-        print("summing")
-        return cdo.remapsum(remap_template_fp, input=input_object, returnXDataset=True)
-    else:
+    if remap_method not in remap_methods:
         raise ValueError(f"Invalid/not-yet-implemented remap method: {remap_method}")
+
+    remapped = remap_methods[remap_method](
+        remap_template_fp, input=input_object, returnXDataset=True
+    )
+    cdo.cleanTempDir()
+    return remapped
 
 
 def generate_chunk_bounds(
@@ -401,9 +395,9 @@ def process_xa_d(
     # drop variables which will never be variables
     # TODO: add as argument with default
     drop_vars = ["time_bnds"]
-    temp_xa_d = temp_xa_d.drop_vars(
-        [var for var in drop_vars if var in temp_xa_d.variables]
-    )
+    # temp_xa_d = temp_xa_d.drop_vars(
+    #     [var for var in drop_vars if var in temp_xa_d.variables]
+    # )
     # sort coords by ascending values
     return temp_xa_d.sortby(list(temp_xa_d.dims))
 
