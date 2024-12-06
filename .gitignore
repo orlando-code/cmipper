@@ -40,4 +40,11 @@ __pycache__/
 .vscode
 
 # TODO: fix this
-**.egg-info/    
+**.egg-info/
+
+# any logging files
+*.log
+
+# any remap files
+*remap*.txt*
+

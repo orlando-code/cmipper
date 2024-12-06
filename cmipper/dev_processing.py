@@ -56,33 +56,11 @@ def extract_top_n_depths(nc_fp, n: int = 20):
         ds = ds.isel({depth_dim: slice(0, n)})
 
         return ds
-        temp_dir = Path(nc_fp).parent / "extracted_levs"
-        temp_dir.mkdir(exist_ok=True)
-        temp_file = Path(temp_dir) / nc_fp.name
-        if temp_file.exists():
-            print(f"{temp_file} already exists. Skipping...")
-        else:
-            ds.to_netcdf(temp_file)
-            print(f"\tProcessed file saved to temporary location: {temp_file}")
-        return temp_file
     else:
         print(
             f"No 'depth' or 'lev' dimension found in {nc_fp} | Skipping level extraction."
         )
         return ds
-
-
-# def remapycon_to_grid(input_file, remap_file, output_file):
-#     """
-#     Use CDO remapycon to remap the input NetCDF file to a regular grid.
-#     """
-#     cmd = ["cdo", f"remapycon,{remap_file}", input_file, output_file]
-#     print(f"\tRemapping {input_file} -> {output_file}")
-#     try:
-#         subprocess.run(cmd, check=True)
-#         print(f"Remapped: {input_file} -> {output_file}")
-#     except subprocess.CalledProcessError as e:
-#         print(f"Error remapping {input_file}: {e}")
 
 
 class NetCDFProcessingPipeline:
@@ -135,6 +113,7 @@ class NetCDFProcessingPipeline:
         else:
             if "extracted_levs" not in nc_fp.parts:
                 print(f"Extracting levels from {nc_fp}")
+                # check if
                 ds = extract_top_n_depths(nc_fp, n=N)
 
             if not output_file.exists():
@@ -160,7 +139,6 @@ class NetCDFProcessingPipeline:
                         ds = extracted_ds
                 ("Saving to", output_file)
                 ds.to_netcdf(output_file)
-                # clean up cdo tempdir
 
             else:
                 print(f"{output_file} already exists. Skipping...")
@@ -186,7 +164,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "parent_dir",
         nargs="?",
-        # default="/maps/rt582/cmipper/.esgpull/data/CMIP6/CMIP/AWI",
         default="/maps/rt582/cmipper/.esgpull/data/CMIP6/CMIP/AWI/AWI-CM-1-1-MR/historical/r3i1p1f1/Omon/so",
         help="The parent directory containing subdirectories of .nc files.",
     )

@@ -394,7 +394,7 @@ def process_xa_d(
         del temp_xa_d.attrs["grid_mapping"]
     # drop variables which will never be variables
     # TODO: add as argument with default
-    drop_vars = ["time_bnds"]
+    # drop_vars = ["time_bnds"]
     # temp_xa_d = temp_xa_d.drop_vars(
     #     [var for var in drop_vars if var in temp_xa_d.variables]
     # )
